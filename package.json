@@ -5,7 +5,8 @@
   "private": true,
   "description": "Pixel Office MCP App, lifecycle hooks, HTTP/SSE bridge, and Chrome extension for Antigravity and Gemini Web.",
   "scripts": {
-    "build": "node scripts/build-ui.mjs && node scripts/build-server.mjs && node scripts/generate-ext-icons.mjs",
+    "build": "node scripts/generate-office-tileset.mjs && node scripts/build-ui.mjs && node scripts/build-server.mjs && node scripts/generate-ext-icons.mjs",
+    "build:tileset": "node scripts/generate-office-tileset.mjs",
     "build:ui": "node scripts/build-ui.mjs",
     "build:server": "node scripts/build-server.mjs",
     "start:bridge": "node src/http-bridge.mjs"

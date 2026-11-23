@@ -25,8 +25,23 @@ async function build() {
   });
 
   const jsCode = bundled.outputFiles[0].text;
+  const atlasPngPath = path.join(rootDir, 'assets', 'tilesets', 'office-atlas-16x16.png');
+  const atlasMapPath = path.join(rootDir, 'assets', 'tilesets', 'atlas-map.json');
+  let atlasBootCode = '';
+  if (fs.existsSync(atlasPngPath) && fs.existsSync(atlasMapPath)) {
+    const b64 = fs.readFileSync(atlasPngPath).toString('base64');
+    const mapJson = fs.readFileSync(atlasMapPath, 'utf8').trim();
+    atlasBootCode += `window.__PO_ATLAS_URI__="data:image/png;base64,${b64}";window.__PO_ATLAS_MAP__=${mapJson};\n`;
+  }
+  const topdownPngPath = path.join(rootDir, 'assets', 'tilesets', 'topdown-atlas.png');
+  const topdownMapPath = path.join(rootDir, 'assets', 'tilesets', 'topdown-atlas-map.json');
+  if (fs.existsSync(topdownPngPath) && fs.existsSync(topdownMapPath)) {
+    const tb64 = fs.readFileSync(topdownPngPath).toString('base64');
+    const tmapJson = fs.readFileSync(topdownMapPath, 'utf8').trim();
+    atlasBootCode += `window.__PO_TOPDOWN_URI__="data:image/png;base64,${tb64}";window.__PO_TOPDOWN_MAP__=${tmapJson};\n`;
+  }
   // Escape closing </script> inside bundled JS just in case
-  const safeJsCode = jsCode.replace(/<\/script/gi, '<\\/script');
+  const safeJsCode = (atlasBootCode + jsCode).replace(/<\/script/gi, '<\\/script');
   const safeCssCode = styleCss.replace(/<\/style/gi, '<\\/style');
 
   let finalHtml = indexHtml

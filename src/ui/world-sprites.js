@@ -1,3 +1,107 @@
+let atlasImg = null;
+let atlasReady = false;
+let topdownImg = null;
+let topdownReady = false;
+
+export const LIMEZU_CHARS = ['adam', 'alex', 'amelia', 'bob'];
+
+export function ensureOfficeAtlas(onLoad) {
+  if (atlasImg) return atlasReady;
+  if (typeof Image === 'undefined' || typeof window === 'undefined') return false;
+  const uri = window.__PO_ATLAS_URI__;
+  if (!uri) return false;
+  atlasImg = new Image();
+  atlasImg.onload = () => {
+    atlasReady = true;
+    onLoad?.();
+  };
+  atlasImg.src = uri;
+  return atlasReady;
+}
+
+export function ensureTopDownAtlas(onLoad) {
+  if (topdownImg) return topdownReady;
+  if (typeof Image === 'undefined' || typeof window === 'undefined') return false;
+  const uri = window.__PO_TOPDOWN_URI__;
+  if (!uri) return false;
+  topdownImg = new Image();
+  topdownImg.onload = () => {
+    topdownReady = true;
+    onLoad?.();
+  };
+  topdownImg.src = uri;
+  return topdownReady;
+}
+
+function getTopDownEntry(key) {
+  const map = window.__PO_TOPDOWN_MAP__;
+  return map?.[key] || map?.sprites?.[key] || null;
+}
+
+export function drawAtlasSprite(ctx, key, dx, dy, dw, dh) {
+  if (!atlasReady || !atlasImg) return false;
+  const sp = window.__PO_ATLAS_MAP__?.sprites?.[key];
+  if (!sp) return false;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(
+    atlasImg,
+    sp.x,
+    sp.y,
+    sp.w,
+    sp.h,
+    Math.round(dx),
+    Math.round(dy),
+    Math.round(dw ?? sp.w),
+    Math.round(dh ?? sp.h)
+  );
+  return true;
+}
+
+export function drawTopDownSprite(ctx, key, dx, dy, dw, dh) {
+  if (!topdownReady || !topdownImg) return false;
+  const sp = getTopDownEntry(key);
+  if (!sp) return false;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(
+    topdownImg,
+    sp.x,
+    sp.y,
+    sp.w,
+    sp.h,
+    Math.round(dx),
+    Math.round(dy),
+    Math.round(dw ?? sp.w),
+    Math.round(dh ?? sp.h)
+  );
+  ctx.restore();
+  return true;
+}
+
+export function drawTopDownFrame(ctx, key, frameIdx, frameW, dx, dy, dw, dh) {
+  if (!topdownReady || !topdownImg) return false;
+  const sp = getTopDownEntry(key);
+  if (!sp) return false;
+  const fw = frameW || sp.h;
+  const maxFrames = Math.max(1, Math.floor(sp.w / fw));
+  const idx = ((frameIdx % maxFrames) + maxFrames) % maxFrames;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(
+    topdownImg,
+    sp.x + idx * fw,
+    sp.y,
+    fw,
+    sp.h,
+    Math.round(dx),
+    Math.round(dy),
+    Math.round(dw ?? fw),
+    Math.round(dh ?? sp.h)
+  );
+  ctx.restore();
+  return true;
+}
+
 export function px(ctx, x, y, w, h, color) {
   ctx.fillStyle = color;
   ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
@@ -176,6 +280,62 @@ export function drawChibiAvatar(ctx, cx, cy, agent, opts = {}) {
     softShadow(ctx, 0, 10.5, 7, 2.5, 0.2);
   }
 
+  const useTopDown =
+    topdownReady &&
+    !agent?.customLook?.shirt &&
+    !agent?.customLook?.hairColor &&
+    !agent?.isSubagent;
+  if (useTopDown) {
+    if (state === 'waiting' || state === 'error') {
+      ctx.save();
+      ctx.strokeStyle = state === 'error' ? '#ff6161' : '#ffc533';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.ellipse(0, seated ? 10.5 : 13.5, 11, 4.5, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    const h = hashId(String(agent?.id || agent?.personaName || 'agent'));
+    const charName = LIMEZU_CHARS[(h >>> 2) % LIMEZU_CHARS.length];
+    const isWalking = Boolean(walking) && !seated;
+    if (isWalking) {
+      const fIdx = (dir >= 0 ? 0 : 4) + (tick % 4);
+      drawTopDownFrame(ctx, `char_${charName}_walk`, fIdx, 16, -11, -30, 22, 44);
+    } else {
+      const fIdx = seated ? 3 : dir >= 0 ? 3 : 2;
+      drawTopDownFrame(ctx, `char_${charName}_idle`, fIdx, 16, -11, -30, 22, 44);
+    }
+    if (christmas) {
+      px(ctx, -6, -24, 12, 3, '#f8fafc');
+      px(ctx, -4, -27, 8, 3, '#dc2626');
+      px(ctx, 3, -27, 3, 3, '#f8fafc');
+    }
+    ctx.restore();
+
+    if (dreaming) {
+      drawDreamingBubble(ctx, cx, cy - 34 * scale, tick);
+    } else if (sleeping || shellElapsedSec >= 1500) {
+      const drift = Math.sin(tick * 0.5) * 2;
+      ctx.save();
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = 'bold 10px Inter, "Segoe UI", sans-serif';
+      ctx.fillText('Zzz', cx + 9, cy - 22 * scale + drift);
+      ctx.restore();
+    } else if (shellElapsedSec >= 600) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.72)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx + 8, cy - 10);
+      ctx.lineTo(cx + 16, cy - 2);
+      ctx.moveTo(cx + 16, cy - 10);
+      ctx.lineTo(cx + 8, cy - 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    return;
+  }
+
   // Legs + shoes
   if (!seated) {
     const stride = walking ? Math.sin(tick * 1.5) * 2.1 : 0;
@@ -309,6 +469,36 @@ export function drawAvatarPortrait(canvas, agent, christmas = false) {
   const bg = agent?.source === 'gemini-web' ? '#24144a' : '#12151f';
   px(ctx, 0, 0, w, h, bg);
   px(ctx, 0, 0, w, 2, agent?.source === 'gemini-web' ? '#7c3aed' : '#5e6ad2');
+  if (
+    topdownReady &&
+    topdownImg &&
+    !agent?.customLook?.shirt &&
+    !agent?.customLook?.hairColor &&
+    !agent?.isSubagent
+  ) {
+    const hash = hashId(String(agent?.id || agent?.personaName || 'agent'));
+    const charName = LIMEZU_CHARS[(hash >>> 2) % LIMEZU_CHARS.length];
+    const sp = getTopDownEntry(`char_${charName}_idle`);
+    if (sp) {
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      const pw = Math.round(w * 0.85);
+      const ph = Math.round(h * 1.15);
+      ctx.drawImage(
+        topdownImg,
+        sp.x + 48,
+        sp.y + 6,
+        16,
+        24,
+        Math.round((w - pw) / 2),
+        Math.round(h * 0.08),
+        pw,
+        ph
+      );
+      ctx.restore();
+      return;
+    }
+  }
   const scale = Math.max(1, Math.floor(w / 22));
   drawChibiAvatar(ctx, w / 2, h * 0.78, { ...agent, state: 'idle', sleeping: false }, {
     scale,
@@ -472,8 +662,11 @@ export function drawBush(ctx, x, y) {
   px(ctx, x + 3, y - 3, 2, 2, '#fde047');
 }
 
-export function drawPottedPlant(ctx, x, y) {
-  softShadow(ctx, x, y + 6, 7, 2.5, 0.2);
+export function drawPottedPlant(ctx, x, y, compact = false) {
+  softShadow(ctx, x, y + 7, 8, 3, 0.22);
+  if (compact && drawTopDownSprite(ctx, 'plant_small', x - 10, y - 14, 20, 20)) return;
+  if (drawTopDownSprite(ctx, 'plant_big', x - 16, y - 24, 32, 32)) return;
+  if (drawAtlasSprite(ctx, 'plantMonstera', x - 11, y - 22, 22, 32)) return;
   outlinedBox(ctx, x - 5, y, 10, 7, '#b45309', '#451a03');
   px(ctx, x - 6, y - 1, 12, 2, '#d97706');
   px(ctx, x - 7, y - 10, 5, 8, '#16a34a');
@@ -496,56 +689,70 @@ export function drawFloorLamp(ctx, x, y, warmGlow = false) {
   px(ctx, x - 4, y - 16, 8, 3, '#ffffff');
 }
 
-export function drawWorkstation(ctx, deskX, deskY, scrColor, tick, hasOcupant) {
-  // Subtle floor shadow under desk
-  px(ctx, deskX + 2, deskY + 21, 60, 4, 'rgba(0,0,0,0.22)');
-  // Desk wood top + front edge bevel
+export function drawWorkstation(ctx, deskX, deskY, scrColor, tick, hasOcupant, modern = false) {
+  px(ctx, deskX + 6, deskY + 21, 52, 5, 'rgba(0,0,0,0.24)');
+  if (!modern && drawTopDownSprite(ctx, 'desk_monitor', deskX + 8, deskY - 22, 48, 48)) {
+    if (hasOcupant && scrColor !== '#0f172a') {
+      const codeShift = tick % 3;
+      px(ctx, deskX + 24, deskY - 19, 16, 9, scrColor);
+      px(ctx, deskX + 26, deskY - 17 + codeShift, 10, 1.5, 'rgba(255,255,255,0.88)');
+      px(ctx, deskX + 26, deskY - 13, 8, 1.5, 'rgba(255,255,255,0.62)');
+    }
+    if (hasOcupant && tick % 4 < 2) {
+      px(ctx, deskX + 44, deskY - 4, 2, 2, 'rgba(248,250,252,0.75)');
+    }
+    return;
+  }
+  const key = modern ? 'deskModern' : 'deskOak';
+  if (drawAtlasSprite(ctx, key, deskX, deskY - 14, 64, 38)) {
+    if (hasOcupant && scrColor !== '#0f172a') {
+      const codeShift = tick % 3;
+      if (modern) {
+        px(ctx, deskX + 13, deskY - 11, 38, 6, scrColor);
+        px(ctx, deskX + 15, deskY - 10 + codeShift, 16, 1.5, 'rgba(255,255,255,0.85)');
+        px(ctx, deskX + 34, deskY - 8, 12, 1.5, 'rgba(255,255,255,0.6)');
+      } else {
+        px(ctx, deskX + 10, deskY - 11, 16, 5, scrColor);
+        px(ctx, deskX + 37, deskY - 11, 16, 5, scrColor);
+        px(ctx, deskX + 12, deskY - 10 + codeShift, 10, 1.5, 'rgba(255,255,255,0.85)');
+        px(ctx, deskX + 39, deskY - 9, 11, 1.5, 'rgba(255,255,255,0.65)');
+      }
+    }
+    if (hasOcupant && tick % 4 < 2) {
+      px(ctx, deskX + 53, deskY + 1, 2, 2, 'rgba(248,250,252,0.65)');
+    }
+    return;
+  }
   outlinedBox(ctx, deskX, deskY, 64, 21, '#d8b989', '#2b1b0e');
   px(ctx, deskX + 1, deskY + 1, 62, 3, '#ecd2a8');
   px(ctx, deskX, deskY + 18, 64, 3, '#b58d58');
-  px(ctx, deskX + 6, deskY + 21, 4, 4, '#334155');
-  px(ctx, deskX + 54, deskY + 21, 4, 4, '#334155');
-
-  // Dual monitor stand & bezel
   px(ctx, deskX + 29, deskY - 2, 6, 4, '#334155');
   outlinedBox(ctx, deskX + 14, deskY - 14, 36, 13, '#181b24', '#090b10');
   px(ctx, deskX + 16, deskY - 12, 32, 9, scrColor);
-  if (hasOcupant && scrColor !== '#0f172a') {
-    const codeShift = tick % 3;
-    px(ctx, deskX + 18, deskY - 10 + codeShift, 14, 2, 'rgba(255,255,255,0.7)');
-    px(ctx, deskX + 18, deskY - 6, 22, 1.5, 'rgba(255,255,255,0.45)');
-  }
-
-  // Keyboard & mouse pad
-  px(ctx, deskX + 20, deskY + 6, 20, 5, '#334155');
-  px(ctx, deskX + 21, deskY + 7, 18, 3, '#64748b');
-  px(ctx, deskX + 44, deskY + 7, 6, 4, '#1e293b');
-
-  // Steaming coffee mug
-  px(ctx, deskX + 7, deskY + 5, 5, 5, '#f8fafc');
-  px(ctx, deskX + 8, deskY + 6, 3, 2, '#78350f');
-  if (hasOcupant && tick % 4 < 2) {
-    px(ctx, deskX + 9, deskY + 2, 2, 2, 'rgba(248,250,252,0.55)');
-  }
 }
 
-export function drawOfficeChair(ctx, sx, sy) {
+export function drawOfficeChair(ctx, sx, sy, facingDown = false) {
   softShadow(ctx, sx, sy + 7, 9, 3, 0.22);
+  const cKey = facingDown ? 'chair_down' : 'chair_up';
+  if (drawTopDownSprite(ctx, cKey, sx - 11, sy - 28, 22, 42)) return;
+  if (drawAtlasSprite(ctx, 'chairSwivel', sx - 11, sy - 9, 22, 20)) return;
   outlinedBox(ctx, sx - 9, sy - 5, 18, 12, '#334155', '#0f172a');
   px(ctx, sx - 7, sy - 4, 14, 5, '#475569');
-  px(ctx, sx - 11, sy - 1, 2, 6, '#1e293b');
-  px(ctx, sx + 9, sy - 1, 2, 6, '#1e293b');
 }
 
 export function drawSofa(ctx, x, y, w = 68, h = 22, color = '#3b82f6') {
-  px(ctx, x + 2, y + h + 1, w - 4, 4, 'rgba(0,0,0,0.22)');
+  px(ctx, x + 2, y + h + 2, w - 4, 5, 'rgba(0,0,0,0.25)');
+  if (drawTopDownSprite(ctx, 'sofa', x + Math.round((w - 72) / 2), y - 14, 72, 48)) return;
+  const key = color === '#d97706' || color === '#b45309' ? 'sofaCaramel' : 'sofaNavy';
+  if (drawAtlasSprite(ctx, key, x, y - 6, w, h + 12)) return;
   outlinedBox(ctx, x, y, w, h, color, '#172554');
   px(ctx, x + 3, y + 3, w - 6, 6, shadeHex(color, 26));
-  px(ctx, x + 6, y + 10, w / 2 - 8, h - 13, shadeHex(color, -18));
-  px(ctx, x + w / 2 + 2, y + 10, w / 2 - 8, h - 13, shadeHex(color, -18));
 }
 
 export function drawBookcase(ctx, x, y) {
+  px(ctx, x + 4, y + 32, 34, 4, 'rgba(0,0,0,0.24)');
+  if (drawTopDownSprite(ctx, 'bookshelf', x + 4, y - 12, 32, 48)) return;
+  if (drawAtlasSprite(ctx, 'bookcase', x, y - 4, 44, 36)) return;
   outlinedBox(ctx, x, y, 42, 28, '#6d3917', '#291507');
   px(ctx, x + 2, y + 3, 38, 10, '#3b1e0a');
   px(ctx, x + 2, y + 15, 38, 10, '#3b1e0a');
@@ -589,10 +796,34 @@ export function drawLamppost(ctx, x, y, nightMode) {
   }
 }
 
-export function drawCar(ctx, x, y, color, dir, nightMode) {
+export function drawCar(ctx, x, y, color, dir, nightMode, variant = null) {
   ctx.save();
   ctx.translate(x, y);
-  softShadow(ctx, 0, 7, 17, 4, 0.3);
+  softShadow(ctx, 0, 8, 19, 5, 0.3);
+  const baseKey =
+    variant && variant.startsWith('car_')
+      ? variant
+      : color === '#facc15' || color === '#eab308'
+        ? 'car_orange'
+        : color === '#38bdf8' || color === '#0284c7'
+          ? 'car_blue'
+          : 'car_red';
+  const spriteKey = `${baseKey}_${dir >= 0 ? 'r' : 'l'}`;
+  if (drawTopDownSprite(ctx, spriteKey, -28, -22, 56, 35)) {
+    if (nightMode) {
+      const hx = dir >= 0 ? 24 : -28;
+      px(ctx, hx, -3, 4, 3, '#fde047');
+      ctx.fillStyle = 'rgba(253, 224, 71, 0.24)';
+      ctx.beginPath();
+      ctx.moveTo(hx + (dir >= 0 ? 4 : 0), -2);
+      ctx.lineTo(hx + dir * 58, -14);
+      ctx.lineTo(hx + dir * 58, 12);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
   outlinedBox(ctx, -17, -6, 34, 12, color, '#090d16');
   px(ctx, -15, -5, 30, 3, shadeHex(color, 26));
   outlinedBox(ctx, -10, -11, 18, 6, '#dbeafe', '#0f172a');
@@ -619,11 +850,13 @@ export function drawCar(ctx, x, y, color, dir, nightMode) {
 }
 
 export function drawPingPongTable(ctx, x, y, tick, active) {
-  px(ctx, x - 25, y + 13, 50, 4, 'rgba(0,0,0,0.22)');
-  outlinedBox(ctx, x - 26, y - 13, 52, 26, '#0369a1', '#082f49');
-  px(ctx, x - 24, y - 11, 48, 22, '#0284c7');
-  px(ctx, x - 24, y - 1, 48, 2, '#f8fafc');
-  px(ctx, x - 1, y - 14, 2, 28, '#e2e8f0');
+  px(ctx, x - 27, y + 16, 54, 5, 'rgba(0,0,0,0.24)');
+  if (!drawAtlasSprite(ctx, 'pingPong', x - 28, y - 16, 56, 34)) {
+    outlinedBox(ctx, x - 26, y - 13, 52, 26, '#0369a1', '#082f49');
+    px(ctx, x - 24, y - 11, 48, 22, '#0284c7');
+    px(ctx, x - 24, y - 1, 48, 2, '#f8fafc');
+    px(ctx, x - 1, y - 14, 2, 28, '#e2e8f0');
+  }
   if (active) {
     const bx = x - 18 + Math.sin(tick * 1.1) * 18;
     const by = y - 2 + Math.cos(tick * 2.2) * 5;
@@ -653,8 +886,16 @@ export function drawLoungeTV(ctx, x, y, tick, show = 'futebol', active = true) {
   }
 }
 
-export function drawArcadeCabinet(ctx, x, y, tick, color = '#4c1d95') {
-  px(ctx, x + 1, y + 30, 18, 4, 'rgba(0,0,0,0.22)');
+export function drawArcadeCabinet(ctx, x, y, tick, color = '#4c1d95', spriteKey = null) {
+  px(ctx, x + 1, y + 32, 20, 4, 'rgba(0,0,0,0.24)');
+  const key =
+    spriteKey === 'arcade_pinball' || color === '#7c3aed' || color === '#9d174d'
+      ? 'arcadePink'
+      : 'arcadePurple';
+  if (drawAtlasSprite(ctx, key, x, y - 2, 22, 36)) {
+    px(ctx, x + 6 + (tick % 6), y + 12, 3, 3, tick % 2 === 0 ? '#00d992' : '#facc15');
+    return;
+  }
   outlinedBox(ctx, x, y, 20, 30, color, '#0f0720');
   px(ctx, x + 2, y + 2, 16, 4, '#f43f5e');
   px(ctx, x + 3, y + 8, 14, 10, '#090d16');
@@ -671,6 +912,7 @@ export function drawPetSprite(ctx, cx, cy, petType, mood, tick, dir = 1, scale =
   ctx.save();
   ctx.translate(cx, cy + hop * scale);
   softShadow(ctx, 0, 9 * scale, 7 * scale, 2.5 * scale, 0.25);
+
   ctx.scale(dir * scale, scale);
 
   if (petType === 'cyberfox') {

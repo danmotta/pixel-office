@@ -1,6 +1,7 @@
 import { getAgentPersonality } from './social-engine.js';
 import {
   drawArcadeCabinet,
+  drawAtlasSprite,
   drawBookcase,
   drawBush,
   drawCar,
@@ -16,8 +17,11 @@ import {
   drawPottedPlant,
   drawSofa,
   drawSpeechBubble,
+  drawTopDownSprite,
   drawTree,
   drawWorkstation,
+  ensureOfficeAtlas,
+  ensureTopDownAtlas,
   outlinedBox,
   px,
 } from './world-sprites.js';
@@ -607,6 +611,8 @@ export class OfficeCanvasRenderer {
     this.rafId = null;
     this.lastFrameAt = performance.now();
     this.dt = 0.016;
+    ensureOfficeAtlas(() => this.draw());
+    ensureTopDownAtlas(() => this.draw());
     this.setupPointerCamera();
   }
 
@@ -619,7 +625,6 @@ export class OfficeCanvasRenderer {
       px(g, 0, 0, 64, 64, pal.grassA);
       px(g, 0, 0, 32, 32, pal.grassB);
       px(g, 32, 32, 32, 32, pal.grassB);
-      // Tuft details & tiny meadow flowers
       const tufts = [[6, 8], [22, 18], [40, 10], [52, 26], [14, 42], [44, 52], [28, 56]];
       for (const [tx, ty] of tufts) {
         px(g, tx, ty, 2, 2, pal.grassSpec);
@@ -631,30 +636,37 @@ export class OfficeCanvasRenderer {
 
     const woodCanvas = makeOffscreenPattern(32, (g) => {
       px(g, 0, 0, 32, 32, pal.floorWoodA);
-      px(g, 0, 8, 32, 1, pal.floorWoodB);
-      px(g, 0, 16, 32, 1, pal.floorWoodB);
-      px(g, 0, 24, 32, 1, pal.floorWoodB);
-      px(g, 0, 31, 32, 1, pal.floorWoodB);
-      px(g, 10, 0, 1, 8, pal.floorWoodB);
-      px(g, 24, 8, 1, 8, pal.floorWoodB);
-      px(g, 6, 16, 1, 8, pal.floorWoodB);
-      px(g, 20, 24, 1, 8, pal.floorWoodB);
+      px(g, 0, 8, 32, 8, pal.floorWoodB);
+      px(g, 0, 24, 32, 8, pal.floorWoodB);
+      for (const py of [7, 15, 23, 31]) {
+        px(g, 0, py, 32, 1, 'rgba(69, 26, 3, 0.24)');
+        px(g, 0, py - 6, 32, 1, 'rgba(255, 255, 255, 0.09)');
+      }
+      px(g, 10, 0, 1, 8, 'rgba(69, 26, 3, 0.26)');
+      px(g, 24, 8, 1, 8, 'rgba(69, 26, 3, 0.26)');
+      px(g, 6, 16, 1, 8, 'rgba(69, 26, 3, 0.26)');
+      px(g, 20, 24, 1, 8, 'rgba(69, 26, 3, 0.26)');
     });
 
     const tileCanvas = makeOffscreenPattern(32, (g) => {
       px(g, 0, 0, 32, 32, pal.floorTileA);
       px(g, 0, 0, 16, 16, pal.floorTileB);
       px(g, 16, 16, 16, 16, pal.floorTileB);
-      px(g, 0, 15, 32, 1, 'rgba(15, 23, 42, 0.08)');
-      px(g, 15, 0, 1, 32, 'rgba(15, 23, 42, 0.08)');
+      px(g, 0, 15, 32, 1, 'rgba(15, 23, 42, 0.12)');
+      px(g, 15, 0, 1, 32, 'rgba(15, 23, 42, 0.12)');
+      px(g, 1, 1, 14, 1, 'rgba(255, 255, 255, 0.22)');
+      px(g, 17, 17, 14, 1, 'rgba(255, 255, 255, 0.22)');
     });
 
     const corridorCanvas = makeOffscreenPattern(32, (g) => {
       px(g, 0, 0, 32, 32, pal.floorCorridorA);
-      px(g, 0, 0, 16, 16, pal.floorCorridorB);
-      px(g, 16, 16, 16, 16, pal.floorCorridorB);
-      px(g, 6, 6, 2, 2, 'rgba(15, 23, 42, 0.06)');
-      px(g, 22, 24, 2, 2, 'rgba(255, 255, 255, 0.14)');
+      for (let y = 0; y < 32; y += 2) {
+        for (let x = 0; x < 32; x += 2) {
+          const zig = (((x >> 1) + (y >> 1)) % 8 < 4) ^ ((((x >> 1) - (y >> 1) + 64) % 8) < 4);
+          if (zig) px(g, x, y, 2, 2, pal.floorCorridorB);
+          if (((x >> 1) + (y >> 1)) % 4 === 0) px(g, x, y, 2, 1, 'rgba(15, 23, 42, 0.07)');
+        }
+      }
     });
 
     const entry = {
@@ -1201,10 +1213,13 @@ export class OfficeCanvasRenderer {
       drawLamppost(ctx, lx, sideY + 15, pal.isNight);
     }
 
-    const carX1 = ((now * 0.055) % (layout.worldW + 140)) - 70;
-    const carX2 = layout.worldW + 70 - ((now * 0.044) % (layout.worldW + 140));
-    drawCar(ctx, carX1, sideY + 48, '#ef4444', 1, pal.isNight);
-    drawCar(ctx, carX2, sideY + 86, '#38bdf8', -1, pal.isNight);
+    const span = layout.worldW + 140;
+    const carX1 = ((now * 0.055) % span) - 70;
+    const carX2 = ((now * 0.038 + 460) % span) - 70;
+    const carX3 = layout.worldW + 70 - ((now * 0.044) % span);
+    drawCar(ctx, carX1, sideY + 42, '#ef4444', 1, pal.isNight, 'car_red');
+    drawCar(ctx, carX2, sideY + 62, '#facc15', 1, pal.isNight, 'car_orange');
+    drawCar(ctx, carX3, sideY + 90, '#38bdf8', -1, pal.isNight, 'car_blue');
   }
 
   drawBuildingCore(ctx, layout, pal, patterns) {
@@ -1234,30 +1249,42 @@ export class OfficeCanvasRenderer {
     if (kind === 'patio-deck') {
       ctx.fillStyle = patterns.grass;
       ctx.fillRect(x, y, w, h);
-      outlinedBox(ctx, x + 22, y + 20, w - 44, h - 40, '#a16207', '#451a03');
-      px(ctx, x + 24, y + 22, w - 48, h - 44, '#b45309');
-      for (let py = y + 32; py < y + h - 28; py += 12) {
-        px(ctx, x + 24, py, w - 48, 1, 'rgba(69,26,3,0.32)');
+      // Cedar wood terrace deck with shadow & plank seams
+      px(ctx, x + 22, y + 22, w - 40, h - 38, 'rgba(0,0,0,0.28)');
+      outlinedBox(ctx, x + 18, y + 18, w - 36, h - 36, '#9a4406', '#451a03');
+      px(ctx, x + 20, y + 20, w - 40, h - 40, '#b45309');
+      for (let py = y + 28; py < y + h - 22; py += 8) {
+        px(ctx, x + 20, py, w - 40, 1, 'rgba(69,26,3,0.42)');
+        px(ctx, x + 20, py + 1, w - 40, 1, 'rgba(255,255,255,0.08)');
       }
-      for (const ux of [x + 92, x + w - 92]) {
-        px(ctx, ux - 14, y + h / 2 + 12, 28, 6, 'rgba(0,0,0,0.22)');
-        outlinedBox(ctx, ux - 16, y + h / 2 - 16, 32, 32, '#f8fafc', '#334155');
-        px(ctx, ux - 16, y + h / 2 - 6, 32, 8, '#ef4444');
-        px(ctx, ux - 2, y + h / 2 - 2, 4, 4, '#0f172a');
+      // String lights across patio top
+      px(ctx, x + 22, y + 26, w - 44, 1, '#1e293b');
+      for (let lx = x + 32; lx < x + w - 28; lx += 24) {
+        px(ctx, lx - 2, y + 25, 6, 6, 'rgba(250, 204, 21, 0.25)');
+        px(ctx, lx, y + 27, 2, 3, '#fef08a');
       }
-      if (pal.christmas) drawChristmasTree(ctx, x + w / 2, y + 54, tick);
+      // Striped bistro umbrellas from 16x16 PNG tileset atlas
+      for (const [ux, key] of [
+        [x + 88, 'bistroRed'],
+        [x + w - 88, 'bistroBlue'],
+      ]) {
+        px(ctx, ux - 20, y + h / 2 + 16, 40, 7, 'rgba(0,0,0,0.25)');
+        if (!drawAtlasSprite(ctx, key, ux - 24, y + h / 2 - 22, 48, 44)) {
+          outlinedBox(ctx, ux - 16, y + h / 2 - 16, 32, 32, '#f8fafc', '#334155');
+          px(ctx, ux - 16, y + h / 2 - 6, 32, 8, '#ef4444');
+        }
+      }
+      drawPottedPlant(ctx, x + 32, y + h - 34);
+      drawPottedPlant(ctx, x + w - 32, y + h - 34);
+      if (pal.christmas) drawChristmasTree(ctx, x + w / 2, y + 58, tick);
       return;
     }
 
     // Room wall & frame
     px(ctx, x, y, w, h, pal.wallOuter);
-    const isTileFloor = kind === 'common-copa' || kind === 'common-bath' || kind === 'common-reception';
+    const isTileFloor = kind === 'common-copa' || kind === 'common-bath';
 
-    px(ctx, x + 2, y + 2, w - 4, WALL_H - 2, pal.wallTop);
-    px(ctx, x + 2, y + 18, w - 4, WALL_H - 18, pal.wallBottom);
-    px(ctx, x + 2, y + WALL_H - 3, w - 4, 3, pal.wallOuter);
-
-    // Pattern floor fill
+    // Pattern floor fill first
     const floorY = y + WALL_H;
     const floorH = h - WALL_H - 2;
     ctx.save();
@@ -1265,11 +1292,51 @@ export class OfficeCanvasRenderer {
     ctx.fillStyle = isTileFloor ? patterns.tile : patterns.wood;
     ctx.fillRect(0, 0, w - 4, floorH);
     ctx.restore();
-    // Subtle top wall ambient occlusion shadow on floor
-    px(ctx, x + 2, floorY, w - 4, 5, 'rgba(0,0,0,0.12)');
+
+    // 3/4 Architectural Wall rendered from 16x16 PNG Tileset Atlas
+    const isModernWall = kind === 'common-lounge' || kind === 'gemini-web' || kind === 'github-hub';
+    const baseWallKey = isModernWall ? 'wallAcoustic' : 'wallWainscot';
+    const tileW = 20;
+    let drewAtlasWall = false;
+    for (let tx = x + 2; tx < x + w - 4; tx += tileW) {
+      const colIdx = Math.round((tx - x) / tileW);
+      let tileKey = baseWallKey;
+      if (!isModernWall && (colIdx === 2 || colIdx === 12)) {
+        tileKey = 'wallWindow';
+      } else if (!isModernWall && colIdx === 4 && kind !== 'common-copa') {
+        tileKey = 'wallPainting';
+      }
+      const dw = Math.min(tileW, x + w - 2 - tx);
+      if (drawAtlasSprite(ctx, tileKey, tx, y + 2, dw, WALL_H - 2)) {
+        drewAtlasWall = true;
+        if (tileKey === 'wallWindow' && !pal.isNight) {
+          px(ctx, tx + 2, floorY + 1, dw - 4, 16, 'rgba(254, 240, 138, 0.16)');
+        }
+      }
+    }
+    if (!drewAtlasWall) {
+      px(ctx, x + 2, y + 2, w - 4, WALL_H - 2, pal.wallTop);
+      px(ctx, x + 2, y + 18, w - 4, WALL_H - 18, pal.wallBottom);
+      px(ctx, x + 2, y + WALL_H - 3, w - 4, 3, pal.wallOuter);
+    }
+
+    // Top wall ambient occlusion shadow on floor
+    px(ctx, x + 2, floorY, w - 4, 6, 'rgba(0,0,0,0.16)');
+
+    // Glass partition wall accents with diagonal cyan/white reflections on corridor side
+    const glassY = isTop ? y + h - 4 : y;
+    px(ctx, x + 12, glassY, w / 2 - 38, 4, '#0f172a');
+    px(ctx, x + 14, glassY + 1, w / 2 - 42, 2, 'rgba(103, 232, 249, 0.45)');
+    px(ctx, x + w / 2 + 26, glassY, w / 2 - 38, 4, '#0f172a');
+    px(ctx, x + w / 2 + 28, glassY + 1, w / 2 - 42, 2, 'rgba(103, 232, 249, 0.45)');
+    for (let gx = x + 24; gx < x + w - 28; gx += 36) {
+      if (Math.abs(gx - (x + w / 2)) > 28) {
+        px(ctx, gx, glassY + 1, 10, 1, 'rgba(255, 255, 255, 0.78)');
+      }
+    }
 
     // Open doorway into corridor
-    const doorW = 42;
+    const doorW = 44;
     const doorX = x + w / 2 - doorW / 2;
     const doorY = isTop ? y + h - 4 : y - 2;
     ctx.save();
@@ -1342,84 +1409,177 @@ export class OfficeCanvasRenderer {
   }
 
   drawReceptionInterior(ctx, x, y, w, h, pal) {
-    outlinedBox(ctx, x + 20, y + 30, 30, 26, '#64748b', '#1e293b');
-    outlinedBox(ctx, x + 56, y + 30, 30, 26, '#64748b', '#1e293b');
-    px(ctx, x + 34, y + 32, 2, 22, '#334155');
-    px(ctx, x + 70, y + 32, 2, 22, '#334155');
-
-    outlinedBox(ctx, x + 122, y + 28, 114, 18, '#0f1011', '#23252a');
+    // Glowing wall sign & clock
+    outlinedBox(ctx, x + 98, y + 27, 108, 15, '#0f1011', '#451a03');
     ctx.fillStyle = '#00d992';
-    ctx.font = 'bold 9.5px Inter, Consolas, sans-serif';
-    ctx.fillText('PIXEL OFFICE', x + 144, y + 37);
+    ctx.font = 'bold 9px Inter, Consolas, sans-serif';
+    ctx.fillText('PIXEL OFFICE', x + 120, y + 35);
+    drawTopDownSprite(ctx, 'clock', x + 226, y + 22, 18, 18);
 
-    outlinedBox(ctx, x + 116, y + 76, 86, 24, '#d97706', '#451a03');
-    px(ctx, x + 138, y + 66, 20, 12, '#1e293b');
-    px(ctx, x + 140, y + 68, 16, 8, '#38bdf8');
-    drawSofa(ctx, x + 136, y + 124, 68, 22, '#3b82f6');
-    drawPottedPlant(ctx, x + 30, y + 92);
-    if (!pal.christmas) drawPottedPlant(ctx, x + w - 32, y + 82);
+    // Water cooler & top-down plants
+    if (!drawTopDownSprite(ctx, 'water_dispenser', x + 62, y + 36, 22, 42)) {
+      drawAtlasSprite(ctx, 'waterCooler', x + 64, y + 36, 22, 42);
+    }
+    drawPottedPlant(ctx, x + 26, y + 72);
+    if (!pal.christmas) drawPottedPlant(ctx, x + w - 26, y + 72);
+
+    // Woven crimson Persian rug with golden border in waiting lounge
+    outlinedBox(ctx, x + 24, y + 114, 134, 72, '#991b1b', '#d97706');
+    outlinedBox(ctx, x + 28, y + 118, 126, 64, '#b91c1c', '#fde047');
+    px(ctx, x + 36, y + 126, 110, 48, '#7f1d1d');
+
+    // Waiting lounge sofa + top-down coffee table with mug
+    drawSofa(ctx, x + 46, y + 124, 86, 26, '#d97706');
+    if (!drawTopDownSprite(ctx, 'coffee_table', x + 66, y + 160, 44, 22)) {
+      outlinedBox(ctx, x + 64, y + 162, 50, 16, '#c88a51', '#451a03');
+      px(ctx, x + 72, y + 165, 12, 8, '#38bdf8');
+      px(ctx, x + 94, y + 166, 8, 6, '#fef08a');
+    }
+    drawTopDownSprite(ctx, 'mug', x + 82, y + 156, 16, 16);
+
+    // Reception counter + open laptop + trash bin
+    px(ctx, x + 178, y + 112, 92, 6, 'rgba(0,0,0,0.24)');
+    if (!drawAtlasSprite(ctx, 'receptionDesk', x + 176, y + 66, 96, 52)) {
+      outlinedBox(ctx, x + 176, y + 76, 92, 26, '#d97706', '#451a03');
+    }
+    drawTopDownSprite(ctx, 'laptop_open', x + 214, y + 64, 20, 20);
+    drawTopDownSprite(ctx, 'trash_bin', x + 272, y + 86, 18, 18);
   }
 
   drawCopaInterior(ctx, x, y, tick) {
-    outlinedBox(ctx, x + 20, y + 46, 152, 22, '#e2e8f0', '#475569');
-    outlinedBox(ctx, x + 30, y + 48, 18, 16, '#334155', '#0f172a');
-    px(ctx, x + 36, y + 42, 4, 4, tick % 4 < 2 ? '#f8fafc' : '#94a3b8');
-    outlinedBox(ctx, x + 182, y + 40, 26, 30, '#cbd5e1', '#475569');
-    outlinedBox(ctx, x + 216, y + 40, 26, 30, '#ef4444', '#7f1d1d');
-    outlinedBox(ctx, x + 250, y + 46, 18, 22, '#57c1ff', '#0369a1');
+    // Woven kitchen runner mat + wall clock
+    outlinedBox(ctx, x + 24, y + 84, 152, 16, '#0f766e', '#5eead4');
+    drawTopDownSprite(ctx, 'clock', x + 24, y + 18, 18, 18);
 
-    // Dining wood table
-    outlinedBox(ctx, x + 64, y + 118, 176, 32, '#f8fafc', '#64748b');
-    for (let sx = x + 78; sx < x + 228; sx += 30) {
-      outlinedBox(ctx, sx, y + 104, 14, 10, '#a16207', '#451a03');
-      outlinedBox(ctx, sx, y + 154, 14, 10, '#a16207', '#451a03');
+    // Kitchen sink counter + Red Italian Espresso Bar + Double Stainless Fridge + Water dispenser
+    if (!drawAtlasSprite(ctx, 'kitchenSink', x + 20, y + 36, 92, 48)) {
+      outlinedBox(ctx, x + 20, y + 46, 92, 22, '#e2e8f0', '#475569');
     }
+    if (!drawAtlasSprite(ctx, 'espressoBar', x + 116, y + 36, 62, 48)) {
+      outlinedBox(ctx, x + 116, y + 40, 26, 30, '#ef4444', '#7f1d1d');
+    }
+    // Animated espresso steam
+    px(ctx, x + 134, y + 34 - (tick % 3), 3, 3, 'rgba(248, 250, 252, 0.75)');
+    drawAtlasSprite(ctx, 'fridge', x + 182, y + 32, 54, 52);
+    if (!drawTopDownSprite(ctx, 'water_dispenser', x + 242, y + 38, 22, 42)) {
+      drawAtlasSprite(ctx, 'waterCooler', x + 242, y + 38, 22, 42);
+    }
+    drawTopDownSprite(ctx, 'trash_bin', x + 270, y + 58, 18, 18);
+    drawPottedPlant(ctx, x + 280, y + 98, true);
+
+    // Communal oak dining table with chairs + Ghostpixxells Top-Down pixel dishes + coffee mug
+    for (let sx = x + 78; sx < x + 224; sx += 34) {
+      outlinedBox(ctx, sx, y + 106, 18, 10, '#b45309', '#451a03');
+      px(ctx, sx + 2, y + 107, 14, 3, '#f59e0b');
+      outlinedBox(ctx, sx, y + 164, 18, 10, '#b45309', '#451a03');
+      px(ctx, sx + 2, y + 165, 14, 3, '#f59e0b');
+    }
+    px(ctx, x + 64, y + 160, 176, 6, 'rgba(0,0,0,0.24)');
+    if (!drawAtlasSprite(ctx, 'diningTable', x + 62, y + 112, 180, 54)) {
+      outlinedBox(ctx, x + 64, y + 118, 176, 32, '#c88a51', '#451a03');
+    }
+    drawTopDownSprite(ctx, 'mug', x + 68, y + 123, 16, 16);
+    drawTopDownSprite(ctx, 'food_donut', x + 90, y + 119, 24, 24);
+    drawTopDownSprite(ctx, 'food_burger', x + 120, y + 119, 24, 24);
+    drawTopDownSprite(ctx, 'food_cake', x + 150, y + 119, 24, 24);
+    drawTopDownSprite(ctx, 'food_cookies', x + 180, y + 119, 24, 24);
+    drawTopDownSprite(ctx, 'food_pie', x + 208, y + 120, 22, 22);
   }
 
   drawBathroomInterior(ctx, x, y, activeCircles) {
     const mirrorCircle = activeCircles.find((c) => c.kind === 'mirror');
-    for (let sy = y + 66; sy <= y + 104; sy += 38) {
-      outlinedBox(ctx, x + 24, sy, 26, 20, '#f8fafc', '#64748b');
-      outlinedBox(ctx, x + 16, sy - 12, 30, 11, '#57c1ff', '#0284c7');
+    // Teal vanity runner mat
+    outlinedBox(ctx, x + 74, y + 66, 22, 92, '#0f766e', '#2dd4bf');
+
+    for (let sy = y + 52; sy <= y + 108; sy += 54) {
+      if (!drawAtlasSprite(ctx, 'bathVanity', x + 16, sy - 10, 52, 48)) {
+        outlinedBox(ctx, x + 24, sy, 26, 20, '#f8fafc', '#64748b');
+        outlinedBox(ctx, x + 16, sy - 12, 30, 11, '#57c1ff', '#0284c7');
+      }
       if (mirrorCircle) {
-        px(ctx, x + 28, sy - 9, 6, 6, '#f4c7a1');
-        px(ctx, x + 29, sy - 8, 1, 2, '#0f172a');
-        px(ctx, x + 32, sy - 8, 1, 2, '#0f172a');
+        px(ctx, x + 38, sy - 3, 8, 8, '#f4c7a1');
+        px(ctx, x + 40, sy - 1, 2, 2, '#0f172a');
+        px(ctx, x + 44, sy - 1, 2, 2, '#0f172a');
       }
     }
-    for (let sx = x + 146; sx < x + 276; sx += 44) {
-      outlinedBox(ctx, sx, y + 54, 36, 52, '#cbd5e1', '#475569');
-      outlinedBox(ctx, sx + 11, y + 66, 14, 16, '#f8fafc', '#94a3b8');
+    for (let sx = x + 138; sx < x + 276; sx += 46) {
+      px(ctx, sx + 2, y + 106, 40, 5, 'rgba(0,0,0,0.2)');
+      if (!drawAtlasSprite(ctx, 'bathStall', sx, y + 48, 42, 60)) {
+        outlinedBox(ctx, sx, y + 54, 36, 52, '#cbd5e1', '#475569');
+      }
     }
-    drawPottedPlant(ctx, x + 34, y + 184);
+    drawPottedPlant(ctx, x + 34, y + 188);
+    drawPottedPlant(ctx, x + 268, y + 188);
   }
 
   drawLoungeInterior(ctx, x, y, pal, tick, unlocked, activeCircles) {
-    // Emerald rug under TV
-    px(ctx, x + 20, y + 84, 126, 98, '#14532d');
-    px(ctx, x + 24, y + 88, 118, 90, '#166534');
+    // Panoramic glowing Coral-Reef Aquarium built into Lounge wall
+    drawAtlasSprite(ctx, 'aquarium', x + 14, y + 16, 62, 36);
+    px(ctx, x + 16, y + 48, 58, 10, 'rgba(56, 189, 248, 0.22)');
+
+    // Geometric teal & gold bordered Lounge rug
+    outlinedBox(ctx, x + 18, y + 88, 134, 100, '#0f766e', '#14b8a6');
+    outlinedBox(ctx, x + 22, y + 92, 126, 92, '#115e59', '#5eead4');
+    px(ctx, x + 30, y + 100, 110, 76, '#134e4a');
 
     const tvCircle = activeCircles.find((c) => c.kind === 'tv');
-    drawLoungeTV(ctx, x + 84, y + 54, tick, tvCircle?.show || 'futebol', true);
-    drawSofa(ctx, x + 50, y + 140, 70, 22, '#3b82f6');
-    outlinedBox(ctx, x + 54, y + 176, 14, 14, '#ef4444', '#7f1d1d');
-    outlinedBox(ctx, x + 78, y + 176, 14, 14, '#3b82f6', '#1e3a8a');
-    outlinedBox(ctx, x + 102, y + 176, 14, 14, '#eab308', '#713f12');
-
-    drawBookcase(ctx, x + 162, y + 52);
-    if (unlocked.has('arcade') || true) {
-      drawArcadeCabinet(ctx, x + 228, y + 50, tick, '#5b21b6');
-      drawArcadeCabinet(ctx, x + 256, y + 50, tick + 3, '#7c3aed');
+    drawLoungeTV(ctx, x + 108, y + 46, tick, tvCircle?.show || 'futebol', true);
+    drawSofa(ctx, x + 42, y + 132, 84, 26, '#3b82f6');
+    // Top-Down coffee table + colorful poufs
+    if (!drawTopDownSprite(ctx, 'coffee_table', x + 58, y + 102, 48, 22)) {
+      outlinedBox(ctx, x + 56, y + 104, 54, 18, '#bae6fd', '#0284c7');
+      px(ctx, x + 60, y + 107, 16, 4, 'rgba(255,255,255,0.65)');
     }
+    outlinedBox(ctx, x + 46, y + 170, 16, 14, '#ef4444', '#7f1d1d');
+    outlinedBox(ctx, x + 76, y + 170, 16, 14, '#3b82f6', '#1e3a8a');
+    outlinedBox(ctx, x + 106, y + 170, 16, 14, '#eab308', '#713f12');
+
+    drawBookcase(ctx, x + 164, y + 46);
+    drawArcadeCabinet(ctx, x + 206, y + 42, tick, '#5b21b6', 'arcade_main');
+    drawArcadeCabinet(ctx, x + 238, y + 42, tick + 3, '#7c3aed', 'arcade_pinball');
+    drawArcadeCabinet(ctx, x + 268, y + 42, tick + 5, '#0284c7', 'arcade_main');
+    drawTopDownSprite(ctx, 'coffee_table', x + 162, y + 108, 42, 22);
+    drawTopDownSprite(ctx, 'mug', x + 175, y + 104, 16, 16);
+    drawPottedPlant(ctx, x + 176, y + 148, true);
 
     const ppActive = activeCircles.some((c) => c.kind === 'pingpong');
-    drawPingPongTable(ctx, x + 216, y + 158, tick, ppActive);
-    drawFloorLamp(ctx, x + 26, y + 68, pal.isNight);
+    drawPingPongTable(ctx, x + 230, y + 162, tick, ppActive);
+    drawFloorLamp(ctx, x + 26, y + 72, pal.isNight);
   }
 
   drawProjectRoomInterior(ctx, room, pal, tick, unlocked) {
-    const { x, y, w, h, members = [] } = room;
-    px(ctx, x + 28, y + 62, w - 56, h - 84, pal.christmas ? '#991b1b' : 'rgba(148, 163, 184, 0.25)');
+    const { x, y, w, h, members = [], kind } = room;
+    const isModern = kind === 'gemini-web' || kind === 'gemini';
+
+    // Warm bordered studio carpet
+    if (pal.christmas) {
+      outlinedBox(ctx, x + 28, y + 66, w - 56, h - 88, '#991b1b', '#f59e0b');
+    } else if (isModern) {
+      outlinedBox(ctx, x + 28, y + 66, w - 56, h - 88, 'rgba(30, 41, 59, 0.55)', 'rgba(139, 92, 246, 0.45)');
+      px(ctx, x + 32, y + 70, w - 64, h - 96, 'rgba(15, 23, 42, 0.35)');
+    } else {
+      outlinedBox(ctx, x + 28, y + 66, w - 56, h - 88, 'rgba(120, 53, 15, 0.24)', 'rgba(217, 119, 6, 0.45)');
+      px(ctx, x + 32, y + 70, w - 64, h - 96, 'rgba(180, 83, 9, 0.16)');
+    }
+
+    // Top-Down whiteboard, clock, filing cabinet, server rack, bookcase, printer & trash bin
+    if (!drawTopDownSprite(ctx, 'whiteboard', x + 22, y + 18, 44, 42)) {
+      drawAtlasSprite(ctx, 'whiteboard', x + 18, y + 24, 72, 24);
+    }
+    drawTopDownSprite(ctx, 'clock', x + 106, y + 18, 18, 18);
+    drawTopDownSprite(ctx, 'filing_cabinet', x + 150, y + 20, 20, 40);
+    if (drawAtlasSprite(ctx, 'serverRack', x + 214, y + 20, 22, 42)) {
+      px(ctx, x + 218, y + 28 + (tick % 4) * 5, 3, 2, tick % 2 === 0 ? '#00d992' : '#38bdf8');
+    }
+    drawBookcase(ctx, x + w - 54, y + 46);
+    drawFloorLamp(ctx, x + 18, y + 68, pal.isNight);
+    drawTopDownSprite(ctx, 'printer', x + 10, y + 116, 20, 20);
+    drawTopDownSprite(ctx, 'trash_bin', x + w - 26, y + 116, 16, 16);
+    drawPottedPlant(ctx, x + w - 24, y + h - 30);
+
+    if (unlocked.has('aquarium')) {
+      drawAtlasSprite(ctx, 'aquarium', x + 14, y + h - 46, 54, 34);
+    }
 
     const deskSlots = this.getProjectDeskSlots(room);
     for (let i = 0; i < deskSlots.length; i += 1) {
@@ -1433,20 +1593,8 @@ export class OfficeCanvasRenderer {
             : occupant.state === 'terminal'
               ? '#00d992'
               : '#57c1ff';
-      drawWorkstation(ctx, slot.deskX, slot.deskY, scrColor, tick, Boolean(occupant && !occupant.sleeping));
-      drawOfficeChair(ctx, slot.seatX, slot.seatY);
-    }
-
-    drawBookcase(ctx, x + w - 52, y + 50);
-    drawFloorLamp(ctx, x + 20, y + 66, pal.isNight);
-    if (unlocked.has('whiteboard')) {
-      outlinedBox(ctx, x + 22, y + 27, 44, 15, '#f8fafc', '#475569');
-      px(ctx, x + 26, y + 31, 20, 2, '#5e6ad2');
-      px(ctx, x + 26, y + 35, 14, 2, '#00d992');
-    }
-    if (unlocked.has('aquarium')) {
-      outlinedBox(ctx, x + 18, y + h - 34, 28, 18, '#0369a1', '#0c4a6e');
-      px(ctx, x + 22 + (tick % 14), y + h - 26, 4, 2, '#fb923c');
+      drawWorkstation(ctx, slot.deskX, slot.deskY, scrColor, tick, Boolean(occupant && !occupant.sleeping), isModern);
+      drawOfficeChair(ctx, slot.seatX, slot.seatY, slot.seatY < slot.deskY);
     }
   }
 
