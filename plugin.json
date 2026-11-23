@@ -1,0 +1,12 @@
+{
+  "name": "pixel-office",
+  "displayName": "Pixel Office",
+  "description": "Escritório virtual v4.0 em pixel art (60 FPS + vidro leve + Ctrl+K) para monitorar Antigravity, Gemini Web, GitHub/Projetos, limites reais 5h/24h/7d por modelo com countdown de reset, Vida Social, estado Dormindo/Sonhando, Replay 24h, Kanban e Mascote.",
+  "version": "4.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Abra o Pixel Office para acompanhar meus agentes, repositórios e consumo",
+    "Gere o relatório do dia em Markdown com o que foi feito hoje no Pixel Office",
+    "Mostre um resumo dos agentes ativos, alertas de uso e projetos conectados"
+  ]
+}

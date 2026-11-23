@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Pixel Office · Gemini Web</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="popup-head">
+        <div class="title-row">
+          <img src="icons/icon-48.png" width="24" height="24" alt="" />
+          <h1>Pixel Office</h1>
+        </div>
+        <span id="bridge-pill" class="pill pill-off">Verificando…</span>
+      </header>
+
+      <section class="card">
+        <h2>Abas do Gemini Web (<span id="tabs-count">0</span>)</h2>
+        <ul id="tabs-list" class="tabs-list"></ul>
+      </section>
+
+      <footer class="popup-actions">
+        <button type="button" id="btn-open-office" class="btn btn-primary">
+          Abrir Pixel Office (localhost:4748)
+        </button>
+        <button type="button" id="btn-reconnect" class="btn">
+          Reconectar
+        </button>
+      </footer>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

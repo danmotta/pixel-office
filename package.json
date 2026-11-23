@@ -1,0 +1,20 @@
+{
+  "name": "pixel-office-plugin",
+  "version": "4.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Pixel Office MCP App, lifecycle hooks, HTTP/SSE bridge, and Chrome extension for Antigravity and Gemini Web.",
+  "scripts": {
+    "build": "node scripts/build-ui.mjs && node scripts/build-server.mjs && node scripts/generate-ext-icons.mjs",
+    "build:ui": "node scripts/build-ui.mjs",
+    "build:server": "node scripts/build-server.mjs",
+    "start:bridge": "node src/http-bridge.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "latest",
+    "@modelcontextprotocol/sdk": "^1.12.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

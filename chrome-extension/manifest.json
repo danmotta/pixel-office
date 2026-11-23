@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Pixel Office · Gemini Web Bridge",
+  "version": "1.0.0",
+  "description": "Envia o estado ao vivo das suas abas do Gemini Web (gemini.google.com) para o escritório virtual Pixel Office no Antigravity.",
+  "permissions": ["tabs", "storage", "alarms"],
+  "host_permissions": [
+    "https://gemini.google.com/*",
+    "http://127.0.0.1:4748/*"
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Pixel Office · Gemini Web",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://gemini.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
