@@ -91,6 +91,10 @@ function hasTrait(personality, traitId) {
   return personality.traits.some((t) => t.id === traitId);
 }
 
+function isSocialReady(agent) {
+  return Boolean(agent && (agent.state === 'idle' || agent.state === 'done') && !agent.sleeping);
+}
+
 export class SocialEngine {
   constructor() {
     this.profiles = new Map();
@@ -229,6 +233,7 @@ export class SocialEngine {
           x: slot.x,
           y: slot.y,
           facingDir: slot.dir || 1,
+          seated: Boolean(slot.seated),
           activity: circle.label,
           circleKind: circle.kind,
           showMirror: circle.kind === 'mirror',
@@ -310,10 +315,7 @@ export class SocialEngine {
         this.finishCircle(circle, agentMap, onSocialFeed, onSound);
         return false;
       }
-      circle.slots = circle.slots.filter((s) => {
-        const a = agentMap.get(s.agentId);
-        return a && a.state === 'idle' && !a.sleeping;
-      });
+      circle.slots = circle.slots.filter((s) => isSocialReady(agentMap.get(s.agentId)));
       return circle.slots.length >= (circle.minMembers || 1);
     });
 
@@ -322,21 +324,22 @@ export class SocialEngine {
       this.tickCircle(circle, agentMap, now, onSocialFeed, onSound);
     }
 
-    // 4. Spawn new social circles among free idle agents
-    if (now - this.lastCircleSpawnAt < 5000) return;
+    // 4. Spawn new social circles among free idle/done agents
+    if (now - this.lastCircleSpawnAt < 2500) return;
     this.lastCircleSpawnAt = now;
 
-    const busyInCircle = new Set();
-    for (const c of this.circles) {
-      for (const s of c.slots) busyInCircle.add(s.agentId);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const busyInCircle = new Set();
+      for (const c of this.circles) {
+        for (const s of c.slots) busyInCircle.add(s.agentId);
+      }
+
+      const freeIdle = agents.filter((a) => isSocialReady(a) && !busyInCircle.has(a.id));
+      if (freeIdle.length === 0) break;
+
+      const formed = this.tryFormCircle(freeIdle, agents, commonAnchors, now, onSocialFeed);
+      if (!formed) break;
     }
-
-    const freeIdle = agents.filter(
-      (a) => a.state === 'idle' && !a.sleeping && !busyInCircle.has(a.id)
-    );
-    if (freeIdle.length === 0) return;
-
-    this.tryFormCircle(freeIdle, agents, commonAnchors, now, onSocialFeed);
   }
 
   removeAgentFromCircles(agentId) {
@@ -356,7 +359,7 @@ export class SocialEngine {
     if (
       !activeKinds.has('mirror') &&
       anchors.mirror &&
-      (hasTrait(p1, 'vanity') || (others.length === 0 && Math.random() < 0.35))
+      (hasTrait(p1, 'vanity') || (others.length === 0 && Math.random() < 0.25))
     ) {
       const pair = others[0];
       const slots = [
@@ -379,28 +382,111 @@ export class SocialEngine {
         slots,
       });
       this.setBubble(pick.id, pair ? 'Empresta o pente?' : 'Visual em dia! ✨', 'social', 2600);
-      return;
+      return true;
     }
 
     if (others.length === 0) {
-      // Solo TV or coffee break
-      if (!activeKinds.has('tv') && anchors.tv) {
-        const show = ['futebol', 'novela', 'desenho'][Math.floor(Math.random() * 3)];
+      const soloOptions = [];
+      if (!activeKinds.has('rest_nap') && anchors.restBeds?.length) soloOptions.push('rest_nap');
+      if (!activeKinds.has('rest_chill') && anchors.restChill?.length) soloOptions.push('rest_chill');
+      if (!activeKinds.has('visit_room') && anchors.visitSpots?.length) soloOptions.push('visit_room');
+      if (!activeKinds.has('tv') && anchors.tv) soloOptions.push('tv');
+      if (!activeKinds.has('copa') && anchors.copa) soloOptions.push('copa');
+      if (soloOptions.length === 0) return false;
+
+      let soloChoice = soloOptions[Math.floor(Math.random() * soloOptions.length)];
+      if (hasTrait(p1, 'naps') && soloOptions.includes('rest_nap')) soloChoice = 'rest_nap';
+      else if (hasTrait(p1, 'calm') && soloOptions.includes('rest_chill')) soloChoice = 'rest_chill';
+      else if (hasTrait(p1, 'caffeine') && soloOptions.includes('copa')) soloChoice = 'copa';
+
+      if (soloChoice === 'rest_nap') {
+        const bed = anchors.restBeds[Math.floor(Math.random() * anchors.restBeds.length)];
         this.circles.push({
-          id: `c-${now}-tv`,
-          kind: 'tv',
-          show,
-          roomId: anchors.tv.roomId,
-          label: `Vendo ${show} na TV`,
+          id: `c-${now}-nap`,
+          kind: 'rest_nap',
+          roomId: bed.roomId,
+          label: 'Tirando um cochilo no Descanso',
+          minMembers: 1,
+          startedAt: now,
+          nextStepAt: now + 3200,
+          expiresAt: now + 13000,
+          step: 0,
+          slots: [{ agentId: pick.id, x: bed.x, y: bed.y, dir: 1, seated: true }],
+        });
+        this.setBubble(pick.id, 'Recarregando as energias 🛏️', 'social', 2600);
+        return true;
+      }
+
+      if (soloChoice === 'rest_chill') {
+        const cushion = anchors.restChill[Math.floor(Math.random() * anchors.restChill.length)];
+        this.circles.push({
+          id: `c-${now}-chill`,
+          kind: 'rest_chill',
+          roomId: cushion.roomId,
+          label: 'Relaxando na Sala de Descanso',
           minMembers: 1,
           startedAt: now,
           nextStepAt: now + 3000,
-          expiresAt: now + 14000,
+          expiresAt: now + 12000,
           step: 0,
-          slots: [{ agentId: pick.id, x: anchors.tv.x - 14, y: anchors.tv.y, dir: 1 }],
+          slots: [{ agentId: pick.id, x: cushion.x, y: cushion.y, dir: 1, seated: true }],
         });
+        this.setBubble(pick.id, 'Pausa merecida 🧘', 'social', 2600);
+        return true;
       }
-      return;
+
+      if (soloChoice === 'visit_room') {
+        const otherRooms = anchors.visitSpots.filter((v) => v.roomId !== pick.roomId);
+        const pool = otherRooms.length > 0 ? otherRooms : anchors.visitSpots;
+        const spot = pool[Math.floor(Math.random() * pool.length)];
+        this.circles.push({
+          id: `c-${now}-visit`,
+          kind: 'visit_room',
+          roomId: spot.roomId,
+          label: `Visitando ${spot.roomName}`,
+          minMembers: 1,
+          startedAt: now,
+          nextStepAt: now + 2600,
+          expiresAt: now + 11000,
+          step: 0,
+          slots: [{ agentId: pick.id, x: spot.x, y: spot.y, dir: 1, seated: false }],
+        });
+        this.setBubble(pick.id, 'Passando pra dar um oi! 👋', 'social', 2600);
+        return true;
+      }
+
+      if (soloChoice === 'copa') {
+        this.circles.push({
+          id: `c-${now}-copa-solo`,
+          kind: 'copa',
+          roomId: anchors.copa.roomId,
+          label: 'Tomando um café na Copa',
+          minMembers: 1,
+          startedAt: now,
+          nextStepAt: now + 3000,
+          expiresAt: now + 11000,
+          step: 0,
+          slots: [{ agentId: pick.id, x: anchors.copa.x, y: anchors.copa.y, dir: 1, seated: false }],
+        });
+        this.setBubble(pick.id, 'Hora do cafezinho ☕', 'social', 2400);
+        return true;
+      }
+
+      const show = ['futebol', 'novela', 'desenho'][Math.floor(Math.random() * 3)];
+      this.circles.push({
+        id: `c-${now}-tv`,
+        kind: 'tv',
+        show,
+        roomId: anchors.tv.roomId,
+        label: `Vendo ${show} na TV`,
+        minMembers: 1,
+        startedAt: now,
+        nextStepAt: now + 3000,
+        expiresAt: now + 14000,
+        step: 0,
+        slots: [{ agentId: pick.id, x: anchors.tv.x - 14, y: anchors.tv.y, dir: 1, seated: true }],
+      });
+      return true;
     }
 
     const partner = others[0];
@@ -409,26 +495,125 @@ export class SocialEngine {
 
     // Choose activity weighted by traits
     const candidates = [];
-    if (!activeKinds.has('pingpong') && anchors.pingpong) {
-      candidates.push(hasTrait(p1, 'sports') || hasTrait(p2, 'sports') ? 'pingpong' : 'pingpong');
-    }
+    if (!activeKinds.has('rest_nap') && anchors.restBeds?.length >= 2) candidates.push('rest_nap');
+    if (!activeKinds.has('rest_chill') && anchors.restChill?.length >= 2) candidates.push('rest_chill');
+    if (!activeKinds.has('visit_room') && anchors.visitSpots?.length) candidates.push('visit_room');
+    if (!activeKinds.has('pingpong') && anchors.pingpong) candidates.push('pingpong');
     if (!activeKinds.has('jokenpo') && anchors.jokenpo) candidates.push('jokenpo');
     if (!activeKinds.has('copa') && anchors.copa) candidates.push('copa');
     if (!activeKinds.has('arcade') && anchors.arcade) candidates.push('arcade');
     if (!activeKinds.has('tv') && anchors.tv) candidates.push('tv');
     if (!activeKinds.has('chat') && anchors.chat) candidates.push('chat');
 
-    if (candidates.length === 0) return;
+    if (candidates.length === 0) return false;
 
     let chosen = candidates[Math.floor(Math.random() * candidates.length)];
-    if ((hasTrait(p1, 'sports') || hasTrait(p2, 'sports')) && candidates.includes('pingpong')) {
+    if ((hasTrait(p1, 'naps') || hasTrait(p2, 'naps')) && candidates.includes('rest_nap')) {
+      chosen = 'rest_nap';
+    } else if ((hasTrait(p1, 'calm') || hasTrait(p2, 'reading')) && candidates.includes('rest_chill')) {
+      chosen = 'rest_chill';
+    } else if ((hasTrait(p1, 'sports') || hasTrait(p2, 'sports')) && candidates.includes('pingpong')) {
       chosen = 'pingpong';
     } else if ((hasTrait(p1, 'betting') || hasTrait(p1, 'competition')) && candidates.includes('jokenpo')) {
       chosen = 'jokenpo';
     } else if ((hasTrait(p1, 'games') || hasTrait(p2, 'games')) && candidates.includes('arcade')) {
       chosen = 'arcade';
-    } else if ((hasTrait(p1, 'caffeine') || hasTrait(p1, 'gossip')) && candidates.includes('copa')) {
+    } else if ((hasTrait(p1, 'gossip') || hasTrait(p2, 'gossip')) && candidates.includes('visit_room')) {
+      chosen = 'visit_room';
+    } else if (hasTrait(p1, 'caffeine') && candidates.includes('copa')) {
       chosen = 'copa';
+    }
+
+    if (chosen === 'rest_nap') {
+      const slots = [
+        { agentId: pick.id, x: anchors.restBeds[0].x, y: anchors.restBeds[0].y, dir: 1, seated: true },
+        { agentId: partner.id, x: anchors.restBeds[1].x, y: anchors.restBeds[1].y, dir: 1, seated: true },
+      ];
+      this.circles.push({
+        id: `c-${now}-nap`,
+        kind: 'rest_nap',
+        roomId: anchors.restBeds[0].roomId,
+        label: `Descansando (${p1.displayName}, ${p2.displayName})`,
+        minMembers: 1,
+        startedAt: now,
+        nextStepAt: now + 3000,
+        expiresAt: now + 14000,
+        step: 0,
+        slots,
+      });
+      this.setBubble(pick.id, 'Hora de recarregar 😴', 'social', 2600);
+      onSocialFeed?.({
+        ts: now,
+        source: 'social',
+        agentId: pick.id,
+        label: 'Descanso',
+        state: 'idle',
+        message: `🛏️ ${p1.displayName} e ${p2.displayName} foram descansar na Sala de Descanso`,
+      });
+      return true;
+    }
+
+    if (chosen === 'rest_chill') {
+      const members = [pick, partner, ...(third ? [third] : [])];
+      const slots = members.map((m, i) => {
+        const pt = anchors.restChill[i % anchors.restChill.length];
+        return { agentId: m.id, x: pt.x, y: pt.y, dir: i % 2 === 0 ? 1 : -1, seated: true };
+      });
+      this.circles.push({
+        id: `c-${now}-chill`,
+        kind: 'rest_chill',
+        roomId: anchors.restChill[0].roomId,
+        label: `Pausa zen no Descanso (${members.map((m) => getAgentPersonality(m).displayName).join(', ')})`,
+        minMembers: 1,
+        startedAt: now,
+        nextStepAt: now + 2600,
+        expiresAt: now + 13000,
+        step: 0,
+        slots,
+      });
+      this.setBubble(pick.id, hasTrait(p1, 'reading') ? 'Boa dica de leitura! 📚' : 'Paz e silêncio 🧘', 'social', 2600);
+      onSocialFeed?.({
+        ts: now,
+        source: 'social',
+        agentId: pick.id,
+        label: 'Descanso',
+        state: 'idle',
+        message: `🧘 ${p1.displayName} e ${p2.displayName} estão batendo papo na Sala de Descanso`,
+      });
+      return true;
+    }
+
+    if (chosen === 'visit_room') {
+      const otherRooms = anchors.visitSpots.filter(
+        (v) => v.roomId !== pick.roomId || v.roomId !== partner.roomId
+      );
+      const pool = otherRooms.length > 0 ? otherRooms : anchors.visitSpots;
+      const spot = pool[Math.floor(Math.random() * pool.length)];
+      this.circles.push({
+        id: `c-${now}-visit`,
+        kind: 'visit_room',
+        roomId: spot.roomId,
+        label: `Visitando ${spot.roomName} (${p1.displayName}, ${p2.displayName})`,
+        minMembers: 1,
+        startedAt: now,
+        nextStepAt: now + 2400,
+        expiresAt: now + 12000,
+        step: 0,
+        slots: [
+          { agentId: pick.id, x: spot.x - 16, y: spot.y, dir: 1, seated: false },
+          { agentId: partner.id, x: spot.x + 16, y: spot.y, dir: -1, seated: false },
+        ],
+      });
+      this.setBubble(pick.id, 'Como anda essa sala? 👋', 'social', 2600);
+      onSocialFeed?.({
+        ts: now,
+        source: 'social',
+        agentId: pick.id,
+        label: spot.roomName,
+        state: 'idle',
+        message: `🚶 ${p1.displayName} e ${p2.displayName} foram visitar ${spot.roomName}`,
+      });
+      return true;
     }
 
     if (chosen === 'pingpong') {
@@ -453,7 +638,7 @@ export class SocialEngine {
         slots,
       });
       this.setBubble(pick.id, 'Saca lá! 🏓', 'social', 2200);
-      return;
+      return true;
     }
 
     if (chosen === 'jokenpo') {
@@ -480,7 +665,7 @@ export class SocialEngine {
         slots,
       });
       this.setBubble(pick.id, `Valendo 🪙${bet}?`, 'social', 2000);
-      return;
+      return true;
     }
 
     if (chosen === 'arcade') {
@@ -501,7 +686,7 @@ export class SocialEngine {
         slots,
       });
       this.setBubble(pick.id, 'Bora um duelo! 👾', 'social', 2400);
-      return;
+      return true;
     }
 
     if (chosen === 'copa') {
@@ -536,7 +721,7 @@ export class SocialEngine {
         state: 'idle',
         message: `☕ ${p1.displayName} puxou papo na copa com ${p2.displayName}`,
       });
-      return;
+      return true;
     }
 
     if (chosen === 'tv') {
@@ -547,6 +732,7 @@ export class SocialEngine {
         x: anchors.tv.x - 20 + i * 20,
         y: anchors.tv.y,
         dir: 1,
+        seated: true,
       }));
       this.circles.push({
         id: `c-${now}-tv`,
@@ -561,7 +747,7 @@ export class SocialEngine {
         step: 0,
         slots,
       });
-      return;
+      return true;
     }
 
     // chat
@@ -581,6 +767,7 @@ export class SocialEngine {
       ],
     });
     this.setBubble(pick.id, p1.catchphrase, 'social', 2400);
+    return true;
   }
 
   tickCircle(circle, agentMap, now, onSocialFeed, onSound) {
@@ -677,7 +864,33 @@ export class SocialEngine {
       return;
     }
 
-    if (circle.kind === 'copa' && a1) {
+    if (circle.kind === 'rest_nap') {
+      const lines = ['Zzz… 💤', 'Colchão confortável demais…', 'Bateria em 85% 🔋'];
+      const target = circle.slots[circle.step % circle.slots.length].agentId;
+      this.setBubble(target, lines[circle.step % lines.length], 'social', 2400);
+      return;
+    }
+
+    if (circle.kind === 'rest_chill') {
+      const lines = ['Pausa zen 🧘', 'Música ambiente boa…', 'Já já voltamos pro código!'];
+      const target = circle.slots[circle.step % circle.slots.length].agentId;
+      this.setBubble(target, lines[circle.step % lines.length], 'social', 2200);
+      return;
+    }
+
+    if (circle.kind === 'visit_room') {
+      const lines = [
+        'Tudo tranquilo por aqui?',
+        'Curti a organização dessa sala!',
+        'Qualquer coisa chama! 🤝',
+        'Bora entregar! 🚀',
+      ];
+      const target = circle.slots[circle.step % circle.slots.length].agentId;
+      this.setBubble(target, lines[circle.step % lines.length], 'social', 2200);
+      return;
+    }
+
+    if (circle.kind === 'copa') {
       const lines = ['Vai dar certo! ☕', 'Deploy na sexta? 😈', 'Hahaha 😂', 'Mais um café!'];
       const target = circle.slots[circle.step % circle.slots.length].agentId;
       this.setBubble(target, lines[circle.step % lines.length], 'social', 2200);

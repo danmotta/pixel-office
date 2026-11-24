@@ -19,7 +19,7 @@ const KEEP_COMPACT_LINES = 400;
 const BRAIN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const OFFICE_ACTIVE_AGE_MS = 24 * 60 * 60 * 1000;
 const BRAIN_MAX_DIRS = 60;
-const GEMINI_OFFLINE_MS = 90 * 1000;
+const GEMINI_OFFLINE_MS = 5 * 60 * 1000;
 const DONE_TO_IDLE_MS = 45 * 1000;
 const SLEEP_IDLE_MS = 5 * 60 * 1000;
 const WAIT_THRESHOLD_MS = 8 * 1000;
@@ -675,9 +675,17 @@ export class OfficeStore {
       ? record.state
       : 'idle';
 
+    const hadActivity =
+      evt !== 'heartbeat' ||
+      prevState !== nextState ||
+      ['thinking', 'typing', 'done'].includes(nextState) ||
+      session.turnCount > prevTurnCount;
+
     session.state = nextState;
     session.lastHeartbeatAt = ts;
-    session.lastActivityAt = ts;
+    if (hadActivity) {
+      session.lastActivityAt = ts;
+    }
     session.closedAt = null;
 
     if (
@@ -1736,7 +1744,7 @@ export class OfficeStore {
         workspacePath: gem.url,
         model: gem.model || 'Gemini Web',
         state,
-        sleeping: state === 'idle' && elapsed > 4 * 60 * 1000,
+        sleeping: state === 'idle' && now - gem.lastActivityAt > SLEEP_IDLE_MS,
         dreamLabel,
         currentTool: state === 'thinking' ? 'generate_response' : '',
         toolSummary: '',

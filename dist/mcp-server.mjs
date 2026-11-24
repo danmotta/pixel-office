@@ -17064,7 +17064,7 @@ import path from "node:path";
 var DATA_DIR = process.env.PIXEL_OFFICE_DATA_DIR || path.join(os.homedir(), ".gemini", "antigravity", "pixel-office-data");
 var VALID_PETS = /* @__PURE__ */ new Set(["cyberfox", "cat", "dragon", "robot", "none"]);
 var VALID_THEMES = /* @__PURE__ */ new Set(["auto", "day", "night", "cyber", "christmas"]);
-var VALID_ROOM_KINDS = /* @__PURE__ */ new Set(["dev", "warroom", "research", "lounge", "gemini"]);
+var VALID_ROOM_KINDS = /* @__PURE__ */ new Set(["dev", "warroom", "research", "lounge", "rest", "gemini"]);
 var VALID_KANBAN_STATUS = /* @__PURE__ */ new Set(["todo", "doing", "done"]);
 var VALID_HAIR_STYLES = /* @__PURE__ */ new Set([
   "spiky",
@@ -17677,7 +17677,7 @@ var KEEP_COMPACT_LINES = 400;
 var BRAIN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1e3;
 var OFFICE_ACTIVE_AGE_MS = 24 * 60 * 60 * 1e3;
 var BRAIN_MAX_DIRS = 60;
-var GEMINI_OFFLINE_MS = 90 * 1e3;
+var GEMINI_OFFLINE_MS = 5 * 60 * 1e3;
 var DONE_TO_IDLE_MS = 45 * 1e3;
 var SLEEP_IDLE_MS = 5 * 60 * 1e3;
 var WAIT_THRESHOLD_MS = 8 * 1e3;
@@ -18255,9 +18255,12 @@ var OfficeStore = class {
       session.turnCount = Math.max(session.turnCount, record2.responseCount);
     }
     const nextState = ["thinking", "typing", "done", "idle", "error"].includes(record2.state) ? record2.state : "idle";
+    const hadActivity = evt !== "heartbeat" || prevState !== nextState || ["thinking", "typing", "done"].includes(nextState) || session.turnCount > prevTurnCount;
     session.state = nextState;
     session.lastHeartbeatAt = ts;
-    session.lastActivityAt = ts;
+    if (hadActivity) {
+      session.lastActivityAt = ts;
+    }
     session.closedAt = null;
     if (nextState === "thinking" && prevState !== "thinking" || session.turnCount > prevTurnCount) {
       this.geminiMessageEvents.push({ ts, id: rawId });
@@ -19147,7 +19150,7 @@ var OfficeStore = class {
         workspacePath: gem.url,
         model: gem.model || "Gemini Web",
         state,
-        sleeping: state === "idle" && elapsed > 4 * 60 * 1e3,
+        sleeping: state === "idle" && now - gem.lastActivityAt > SLEEP_IDLE_MS,
         dreamLabel,
         currentTool: state === "thinking" ? "generate_response" : "",
         toolSummary: "",

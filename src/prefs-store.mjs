@@ -8,7 +8,7 @@ export const DATA_DIR =
 
 const VALID_PETS = new Set(['cyberfox', 'cat', 'dragon', 'robot', 'none']);
 const VALID_THEMES = new Set(['auto', 'day', 'night', 'cyber', 'christmas']);
-const VALID_ROOM_KINDS = new Set(['dev', 'warroom', 'research', 'lounge', 'gemini']);
+const VALID_ROOM_KINDS = new Set(['dev', 'warroom', 'research', 'lounge', 'rest', 'gemini']);
 const VALID_KANBAN_STATUS = new Set(['todo', 'doing', 'done']);
 const VALID_HAIR_STYLES = new Set([
   'spiky',

@@ -691,12 +691,21 @@ export function drawFloorLamp(ctx, x, y, warmGlow = false) {
 
 export function drawWorkstation(ctx, deskX, deskY, scrColor, tick, hasOcupant, modern = false) {
   px(ctx, deskX + 6, deskY + 21, 52, 5, 'rgba(0,0,0,0.24)');
-  if (!modern && drawTopDownSprite(ctx, 'desk_monitor', deskX + 8, deskY - 22, 48, 48)) {
+  if (drawTopDownSprite(ctx, 'desk_monitor', deskX + 8, deskY - 22, 48, 48)) {
+    if (modern) {
+      px(ctx, deskX + 18, deskY + 2, 28, 1.5, 'rgba(168, 85, 247, 0.55)');
+    }
     if (hasOcupant && scrColor !== '#0f172a') {
       const codeShift = tick % 3;
-      px(ctx, deskX + 24, deskY - 19, 16, 9, scrColor);
+      const activeScr = modern && scrColor === '#57c1ff' ? '#c084fc' : scrColor;
+      px(ctx, deskX + 24, deskY - 19, 16, 9, activeScr);
       px(ctx, deskX + 26, deskY - 17 + codeShift, 10, 1.5, 'rgba(255,255,255,0.88)');
       px(ctx, deskX + 26, deskY - 13, 8, 1.5, 'rgba(255,255,255,0.62)');
+    } else if (modern) {
+      px(ctx, deskX + 24, deskY - 19, 16, 9, 'rgba(168, 85, 247, 0.28)');
+      if (tick % 6 < 3) {
+        px(ctx, deskX + 27, deskY - 16, 3, 2, 'rgba(216, 180, 254, 0.72)');
+      }
     }
     if (hasOcupant && tick % 4 < 2) {
       px(ctx, deskX + 44, deskY - 4, 2, 2, 'rgba(248,250,252,0.75)');

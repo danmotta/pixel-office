@@ -41,6 +41,10 @@ export const STATE_LABELS_PT = {
   offline: 'Offline',
 };
 
+function isGeminiKind(kind) {
+  return kind === 'gemini-web' || kind === 'gemini';
+}
+
 const ROOM_W = 304;
 const ROOM_H = 224;
 const CORRIDOR_H = 52;
@@ -167,7 +171,8 @@ export function createDemoSnapshot(tickSec) {
   const now = Date.now();
   const s1 = ['coding', 'terminal', 'coding', 'thinking'][Math.floor(tickSec / 4) % 4];
   const s2 = ['waiting', 'coding', 'waiting', 'done'][Math.floor(tickSec / 6) % 4];
-  const gemState = ['thinking', 'done', 'idle', 'typing'][Math.floor(tickSec / 5) % 4];
+  const gemState = ['thinking', 'typing', 'idle', 'done'][Math.floor(tickSec / 5) % 4];
+  const gemState2 = ['thinking', 'typing', 'thinking', 'done'][Math.floor(tickSec / 4) % 4];
 
   const agents = [
     {
@@ -397,10 +402,10 @@ export function createDemoSnapshot(tickSec) {
       room: 'Gemini Web',
       workspacePath: 'https://gemini.google.com/app',
       model: 'Gemini Web Pro',
-      state: gemState === 'thinking' ? 'thinking' : 'idle',
+      state: gemState,
       sleeping: false,
       dreamLabel: '',
-      currentTool: gemState === 'thinking' ? 'generate_response' : '',
+      currentTool: gemState === 'thinking' || gemState === 'typing' ? 'generate_response' : '',
       toolSummary: '',
       toolStartedAt: null,
       lastUserInput: 'Sugira ideias de vida social para avatares no escritório',
@@ -415,6 +420,38 @@ export function createDemoSnapshot(tickSec) {
       customLook: null,
       startedAt: now - 22 * 60 * 1000,
       lastActivityAt: now - 90000,
+    },
+    {
+      id: 'demo-gem-marina',
+      shortId: 'tab-84',
+      source: 'gemini-web',
+      tabId: 84,
+      url: 'https://gemini.google.com/app',
+      personaName: 'Marina',
+      title: 'Revisão Arquitetura Top-Down',
+      autoTitle: 'Revisão Arquitetura Top-Down',
+      roomId: 'gemini:Gemini Web',
+      room: 'Gemini Web',
+      workspacePath: 'https://gemini.google.com/app',
+      model: 'Gemini Web Pro',
+      state: gemState2,
+      sleeping: false,
+      dreamLabel: '',
+      currentTool: gemState2 === 'thinking' || gemState2 === 'typing' ? 'generate_response' : '',
+      toolSummary: '',
+      toolStartedAt: null,
+      lastUserInput: 'Revisar layout das salas e descanso dos agentes',
+      errorMessage: '',
+      inputTokens: 0,
+      cacheTokens: 0,
+      outputTokens: 0,
+      toolCount: 14,
+      recentTools: [],
+      subagents: [],
+      subagentDetails: [],
+      customLook: null,
+      startedAt: now - 16 * 60 * 1000,
+      lastActivityAt: now - 3000,
     },
   ];
 
@@ -495,9 +532,9 @@ export function createDemoSnapshot(tickSec) {
     },
     stats: {
       total: agents.length,
-      active: 4,
+      active: 5,
       antigravityCount: 7,
-      geminiWebCount: 1,
+      geminiWebCount: 2,
       totalInputTokens: 262000,
       totalOutputTokens: 36670,
       totalCacheTokens: 438800,
@@ -534,7 +571,7 @@ export function createDemoSnapshot(tickSec) {
     rooms: [
       { id: 'ag:pixel-office', name: 'pixel-office', autoName: 'pixel-office', kind: 'antigravity', accentColor: '', isCustom: false, agentIds: ['demo-ag-rafaela', 'demo-ag-isabela', 'demo-ag-vicente', 'demo-ag-aline'], constructingUntil: 0 },
       { id: 'ag:app-mobile', name: 'app-mobile', autoName: 'app-mobile', kind: 'antigravity', accentColor: '', isCustom: false, agentIds: ['demo-ag-bianca', 'demo-ag-jonas', 'demo-ag-mateus'], constructingUntil: 0 },
-      { id: 'gemini:Gemini Web', name: 'Gemini Web', autoName: 'Gemini Web', kind: 'gemini-web', accentColor: '', isCustom: false, agentIds: ['demo-gem-luan'], constructingUntil: 0 },
+      { id: 'gemini:Gemini Web', name: 'Gemini Web', autoName: 'Gemini Web', kind: 'gemini-web', accentColor: '', isCustom: false, agentIds: ['demo-gem-luan', 'demo-gem-marina'], constructingUntil: 0 },
       { id: 'github:repos', name: 'GitHub & Projetos', autoName: 'GitHub & Projetos', kind: 'github-hub', accentColor: '#00d992', isCustom: false, agentIds: [], repos: demoRepos, constructingUntil: 0 },
     ],
     agents,
@@ -910,7 +947,15 @@ export class OfficeCanvasRenderer {
       { id: 'common:lounge', name: 'Lounge', kind: 'common-lounge', x: bx + ROOM_W, y: corridorY + CORRIDOR_H, w: ROOM_W, h: ROOM_H, isTop: false },
     ];
 
-    const wingCols = Math.max(1, Math.ceil(dynamicRooms.length / 2));
+    const restRoom = {
+      id: 'common:descanso',
+      name: 'Descanso',
+      kind: 'common-rest',
+      accentColor: '#818cf8',
+      members: [],
+    };
+    const wingRooms = [restRoom, ...dynamicRooms];
+    const wingCols = Math.max(1, Math.ceil(wingRooms.length / 2));
     const placedWing = [];
 
     for (let idx = 0; idx < wingCols * 2; idx += 1) {
@@ -918,7 +963,7 @@ export class OfficeCanvasRenderer {
       const isTop = idx % 2 === 0;
       const rx = bx + col * ROOM_W;
       const ry = isTop ? by : corridorY + CORRIDOR_H;
-      const r = dynamicRooms[idx];
+      const r = wingRooms[idx];
 
       if (r) {
         placedWing.push({ ...r, x: rx, y: ry, w: ROOM_W, h: ROOM_H, isTop });
@@ -945,6 +990,19 @@ export class OfficeCanvasRenderer {
       },
     }));
 
+    const placedRest = allRooms.find((r) => r.id === 'common:descanso') || {
+      x: bx + 2 * ROOM_W,
+      y: by,
+    };
+    const visitSpots = allRooms
+      .filter((r) => !r.kind.startsWith('common-') && r.kind !== 'github-hub')
+      .map((r) => ({
+        roomId: r.id,
+        roomName: r.name,
+        x: r.x + (r.kind === 'patio-deck' ? 148 : 146),
+        y: r.y + (r.kind === 'patio-deck' ? 146 : 132),
+      }));
+
     const buildingW = (2 + wingCols) * ROOM_W;
     const buildingH = ROOM_H * 2 + CORRIDOR_H;
     const worldW = LEFT_GRASS + buildingW + RIGHT_GRASS;
@@ -958,6 +1016,17 @@ export class OfficeCanvasRenderer {
       pingpong: { roomId: 'common:lounge', x: bx + ROOM_W + 220, y: corridorY + CORRIDOR_H + 154 },
       jokenpo: { roomId: 'common:recepcao', x: bx + 138, y: by + 168 },
       chat: { roomId: 'common:recepcao', x: bx + 216, y: by + 158 },
+      restBeds: [
+        { roomId: 'common:descanso', x: placedRest.x + 44, y: placedRest.y + 98 },
+        { roomId: 'common:descanso', x: placedRest.x + 112, y: placedRest.y + 98 },
+        { roomId: 'common:descanso', x: placedRest.x + 180, y: placedRest.y + 98 },
+      ],
+      restChill: [
+        { roomId: 'common:descanso', x: placedRest.x + 66, y: placedRest.y + 166 },
+        { roomId: 'common:descanso', x: placedRest.x + 104, y: placedRest.y + 166 },
+        { roomId: 'common:descanso', x: placedRest.x + 216, y: placedRest.y + 184 },
+      ],
+      visitSpots,
     };
 
     return {
@@ -1294,7 +1363,12 @@ export class OfficeCanvasRenderer {
     ctx.restore();
 
     // 3/4 Architectural Wall rendered from 16x16 PNG Tileset Atlas
-    const isModernWall = kind === 'common-lounge' || kind === 'gemini-web' || kind === 'github-hub';
+    const isModernWall =
+      kind === 'common-lounge' ||
+      kind === 'common-rest' ||
+      kind === 'rest' ||
+      isGeminiKind(kind) ||
+      kind === 'github-hub';
     const baseWallKey = isModernWall ? 'wallAcoustic' : 'wallWainscot';
     const tileW = 20;
     let drewAtlasWall = false;
@@ -1355,10 +1429,11 @@ export class OfficeCanvasRenderer {
     const pillW = Math.min(w - 28, 204);
     const pillX = x + w / 2 - pillW / 2;
     const pillY = y + 7;
-    const isGem = kind === 'gemini-web' || kind === 'gemini';
+    const isGem = isGeminiKind(kind);
     const isGh = kind === 'github-hub';
+    const isRest = kind === 'common-rest' || kind === 'rest';
     const accent =
-      room.accentColor || (isGem ? '#a855f7' : isGh ? '#00d992' : '#5e6ad2');
+      room.accentColor || (isGem ? '#a855f7' : isGh ? '#00d992' : isRest ? '#818cf8' : '#5e6ad2');
 
     ctx.save();
     ctx.fillStyle = 'rgba(13, 14, 17, 0.94)';
@@ -1395,8 +1470,10 @@ export class OfficeCanvasRenderer {
       this.drawCopaInterior(ctx, x, y, tick);
     } else if (kind === 'common-bath') {
       this.drawBathroomInterior(ctx, x, y, activeCircles);
-    } else if (kind === 'common-lounge') {
+    } else if (kind === 'common-lounge' || kind === 'lounge') {
       this.drawLoungeInterior(ctx, x, y, pal, tick, unlocked, activeCircles);
+    } else if (isRest) {
+      this.drawRestRoomInterior(ctx, x, y, w, h, pal, tick);
     } else if (isGh) {
       this.drawGitHubPods(ctx, room);
     } else {
@@ -1547,9 +1624,66 @@ export class OfficeCanvasRenderer {
     drawFloorLamp(ctx, x + 26, y + 72, pal.isNight);
   }
 
+  drawRestRoomInterior(ctx, x, y, w, h, pal, tick) {
+    // Cozy warm-indigo ambient wash for quiet rest zone
+    px(ctx, x + 2, y + WALL_H, w - 4, h - WALL_H - 2, 'rgba(30, 27, 75, 0.24)');
+
+    // Calming lavender/indigo rug across sleeping & meditation area
+    outlinedBox(ctx, x + 16, y + 60, 198, 138, '#1e1b4b', '#6366f1');
+    outlinedBox(ctx, x + 20, y + 64, 190, 130, '#312e81', '#818cf8');
+    px(ctx, x + 26, y + 70, 178, 118, '#1e1b4b');
+
+    // Wall clock, bookshelf, mini cactus/plant & warm floor lamp
+    drawTopDownSprite(ctx, 'clock', x + 118, y + 18, 18, 18);
+    drawBookcase(ctx, x + w - 54, y + 46);
+    drawFloorLamp(ctx, x + 22, y + 152, true);
+    drawPottedPlant(ctx, x + 232, y + 92, true);
+    drawPottedPlant(ctx, x + w - 28, y + h - 32);
+
+    // 3 Top-Down 3/4 Nap Daybeds with wooden frames, soft pillows & colored blankets
+    const bedColors = [
+      { blanket: '#0d9488', fold: '#5eead4', edge: '#115e59' },
+      { blanket: '#4f46e5', fold: '#a5b4fc', edge: '#312e81' },
+      { blanket: '#059669', fold: '#6ee7b7', edge: '#065f46' },
+    ];
+    bedColors.forEach((bc, idx) => {
+      const bx0 = x + 22 + idx * 68;
+      const by0 = y + 66;
+      px(ctx, bx0 + 2, by0 + 58, 40, 5, 'rgba(0,0,0,0.28)');
+      outlinedBox(ctx, bx0, by0, 44, 58, '#78350f', '#2b1b0e');
+      outlinedBox(ctx, bx0 + 3, by0 + 4, 38, 50, '#f1f5f9', '#334155');
+      outlinedBox(ctx, bx0 + 7, by0 + 7, 30, 11, '#ffffff', '#94a3b8');
+      outlinedBox(ctx, bx0 + 3, by0 + 21, 38, 33, bc.blanket, bc.edge);
+      px(ctx, bx0 + 4, by0 + 22, 36, 4, bc.fold);
+    });
+
+    // Meditation / reading zen mat & soft floor cushions (left of central walkway)
+    outlinedBox(ctx, x + 42, y + 142, 82, 50, '#0f766e', '#5eead4');
+    px(ctx, x + 46, y + 146, 74, 42, '#134e4a');
+    for (const [cx0, cy0, fill, edge] of [
+      [x + 66, y + 168, '#818cf8', '#312e81'],
+      [x + 104, y + 168, '#f472b6', '#831843'],
+    ]) {
+      px(ctx, cx0 - 11, cy0 + 8, 22, 4, 'rgba(0,0,0,0.22)');
+      outlinedBox(ctx, cx0 - 12, cy0 - 10, 24, 20, fill, edge);
+      px(ctx, cx0 - 8, cy0 - 6, 16, 6, 'rgba(255,255,255,0.25)');
+    }
+
+    // Coffee table + tea mug + 3rd cushion on right chill corner
+    if (!drawTopDownSprite(ctx, 'coffee_table', x + 194, y + 148, 44, 22)) {
+      outlinedBox(ctx, x + 194, y + 148, 44, 22, '#c88a51', '#451a03');
+    }
+    drawTopDownSprite(ctx, 'mug', x + 208, y + 144, 16, 16);
+    if (tick % 4 < 2) {
+      px(ctx, x + 215, y + 140 - (tick % 3), 2, 2, 'rgba(248, 250, 252, 0.7)');
+    }
+    outlinedBox(ctx, x + 204, y + 174, 24, 20, '#a855f7', '#581c87');
+    px(ctx, x + 208, y + 178, 16, 6, 'rgba(255,255,255,0.22)');
+  }
+
   drawProjectRoomInterior(ctx, room, pal, tick, unlocked) {
     const { x, y, w, h, members = [], kind } = room;
-    const isModern = kind === 'gemini-web' || kind === 'gemini';
+    const isModern = isGeminiKind(kind);
 
     // Warm bordered studio carpet
     if (pal.christmas) {
@@ -1562,14 +1696,27 @@ export class OfficeCanvasRenderer {
       px(ctx, x + 32, y + 70, w - 64, h - 96, 'rgba(180, 83, 9, 0.16)');
     }
 
-    // Top-Down whiteboard, clock, filing cabinet, server rack, bookcase, printer & trash bin
+    // Top-Down whiteboard, optional Gemini wall plaque, clock, filing cabinet, server rack, bookcase, printer & trash bin
     if (!drawTopDownSprite(ctx, 'whiteboard', x + 22, y + 18, 44, 42)) {
       drawAtlasSprite(ctx, 'whiteboard', x + 18, y + 24, 72, 24);
     }
-    drawTopDownSprite(ctx, 'clock', x + 106, y + 18, 18, 18);
-    drawTopDownSprite(ctx, 'filing_cabinet', x + 150, y + 20, 20, 40);
+    if (isModern) {
+      outlinedBox(ctx, x + 76, y + 26, 68, 15, '#170f2e', '#7c3aed');
+      ctx.fillStyle = '#e9d5ff';
+      ctx.font = 'bold 8.5px Inter, Consolas, sans-serif';
+      ctx.fillText('✦ GEMINI', x + 86, y + 34);
+    }
+    drawTopDownSprite(ctx, 'clock', x + (isModern ? 154 : 106), y + 18, 18, 18);
+    drawTopDownSprite(ctx, 'filing_cabinet', x + (isModern ? 182 : 150), y + 20, 20, 40);
     if (drawAtlasSprite(ctx, 'serverRack', x + 214, y + 20, 22, 42)) {
-      px(ctx, x + 218, y + 28 + (tick % 4) * 5, 3, 2, tick % 2 === 0 ? '#00d992' : '#38bdf8');
+      const ledColor = isModern
+        ? tick % 2 === 0
+          ? '#c084fc'
+          : '#38bdf8'
+        : tick % 2 === 0
+          ? '#00d992'
+          : '#38bdf8';
+      px(ctx, x + 218, y + 28 + (tick % 4) * 5, 3, 2, ledColor);
     }
     drawBookcase(ctx, x + w - 54, y + 46);
     drawFloorLamp(ctx, x + 18, y + 68, pal.isNight);
@@ -1586,13 +1733,17 @@ export class OfficeCanvasRenderer {
       const slot = deskSlots[i];
       const occupant = members[i];
       const scrColor =
-        !occupant || occupant.state === 'idle' || occupant.state === 'dreaming' || occupant.sleeping
+        !occupant || occupant.sleeping || occupant.state === 'idle' || occupant.state === 'dreaming'
           ? '#0f172a'
-          : occupant.state === 'waiting'
-            ? '#ffc533'
-            : occupant.state === 'terminal'
-              ? '#00d992'
-              : '#57c1ff';
+          : occupant.state === 'done'
+            ? '#00d992'
+            : occupant.state === 'waiting'
+              ? '#ffc533'
+              : occupant.state === 'terminal'
+                ? '#00d992'
+                : isModern
+                  ? '#c084fc'
+                  : '#57c1ff';
       drawWorkstation(ctx, slot.deskX, slot.deskY, scrColor, tick, Boolean(occupant && !occupant.sleeping), isModern);
       drawOfficeChair(ctx, slot.seatX, slot.seatY, slot.seatY < slot.deskY);
     }
@@ -1660,7 +1811,11 @@ export class OfficeCanvasRenderer {
   }
 
   drawAllAgents(ctx, layout, roomsById, pal, tick, now) {
-    const { allRooms, corridorMidY } = layout;
+    const { allRooms, corridorMidY, commonAnchors } = layout;
+    const restBeds = commonAnchors?.restBeds || [];
+    const restChill = commonAnchors?.restChill || [];
+    let sleepIdx = 0;
+    const renderQueue = [];
 
     for (const room of allRooms) {
       if (!room.members || room.members.length === 0) continue;
@@ -1668,40 +1823,65 @@ export class OfficeCanvasRenderer {
 
       room.members.forEach((agent, idx) => {
         const slot = slots[idx % slots.length];
+        const extraOffset = Math.floor(idx / slots.length) * 18;
+        const canSocialize = (agent.state === 'idle' || agent.state === 'done') && !agent.sleeping;
         const socialTarget =
-          agent.state === 'idle' && !agent.sleeping && this.social
-            ? this.social.getTargetForAgent(agent.id)
-            : null;
+          canSocialize && this.social ? this.social.getTargetForAgent(agent.id) : null;
 
         let targetRoom = room;
-        let targetX = slot.seatX;
+        let targetX = slot.seatX + extraOffset;
         let targetY = slot.seatY;
         let seated = true;
 
         if (agent.sleeping) {
-          targetRoom = room;
-          targetX = slot.seatX;
-          targetY = slot.seatY;
-          seated = true;
+          if (restBeds.length > 0 && roomsById.has('common:descanso')) {
+            const bed = restBeds[sleepIdx % restBeds.length];
+            sleepIdx += 1;
+            targetRoom = roomsById.get(bed.roomId);
+            targetX = bed.x;
+            targetY = bed.y;
+            seated = true;
+          }
         } else if (socialTarget && roomsById.has(socialTarget.roomId)) {
           targetRoom = roomsById.get(socialTarget.roomId);
           targetX = socialTarget.x;
           targetY = socialTarget.y;
-          seated = false;
+          seated = Boolean(socialTarget.seated);
         } else if (agent.state === 'dreaming') {
-          targetRoom = roomsById.get('common:lounge') || room;
-          targetX = targetRoom.x + 70 + (idx % 3) * 28;
-          targetY = targetRoom.y + 148;
-          seated = false;
+          if (restChill.length > 0 && roomsById.has('common:descanso')) {
+            const c = restChill[idx % restChill.length];
+            targetRoom = roomsById.get(c.roomId);
+            targetX = c.x;
+            targetY = c.y;
+            seated = true;
+          } else {
+            targetRoom = roomsById.get('common:lounge') || room;
+            targetX = targetRoom.x + 70 + (idx % 3) * 28;
+            targetY = targetRoom.y + 148;
+            seated = false;
+          }
         } else if (agent.state === 'reading') {
           targetX = room.x + room.w - 60;
           targetY = room.y + WALL_H + 46;
           seated = false;
-        } else if (agent.state === 'idle') {
-          targetRoom = roomsById.get('common:copa') || room;
-          targetX = targetRoom.x + 92 + (idx % 3) * 38;
-          targetY = targetRoom.y + 140;
-          seated = false;
+        } else if (agent.state === 'idle' || agent.state === 'done') {
+          let h = 0;
+          for (let k = 0; k < agent.id.length; k += 1) {
+            h = (h * 31 + agent.id.charCodeAt(k)) >>> 0;
+          }
+          const spots = [
+            ...(restChill.map((c) => ({ ...c, seated: true }))),
+            { roomId: 'common:copa', x: (roomsById.get('common:copa')?.x || room.x) + 110 + (idx % 3) * 34, y: (roomsById.get('common:copa')?.y || room.y) + 140, seated: false },
+            { roomId: 'common:lounge', x: (roomsById.get('common:lounge')?.x || room.x) + 84 + (idx % 2) * 30, y: (roomsById.get('common:lounge')?.y || room.y) + 136, seated: true },
+            { roomId: 'common:recepcao', x: (roomsById.get('common:recepcao')?.x || room.x) + 86 + (idx % 2) * 32, y: (roomsById.get('common:recepcao')?.y || room.y) + 144, seated: true },
+          ].filter((s) => roomsById.has(s.roomId));
+          if (spots.length > 0) {
+            const pickSpot = spots[h % spots.length];
+            targetRoom = roomsById.get(pickSpot.roomId);
+            targetX = pickSpot.x;
+            targetY = pickSpot.y;
+            seated = Boolean(pickSpot.seated);
+          }
         }
 
         const prev = this.agentMotion.get(agent.id) || {
@@ -1720,74 +1900,87 @@ export class OfficeCanvasRenderer {
         );
         this.agentMotion.set(agent.id, next);
 
-        const personality = getAgentPersonality(agent);
-        const shellElapsedSec =
-          agent.toolStartedAt && !['idle', 'done', 'dreaming'].includes(agent.state)
-            ? Math.floor((now - agent.toolStartedAt) / 1000)
-            : 0;
-
-        if (this.selectedAgentId === agent.id) {
-          ctx.save();
-          ctx.strokeStyle = '#5e6ad2';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.roundRect(Math.round(next.x - 16), Math.round(next.y - 26), 32, 43, 6);
-          ctx.stroke();
-          ctx.restore();
-        }
-
-        drawChibiAvatar(ctx, next.x, next.y, agent, {
-          tick,
-          walking: next.moving,
-          dir: socialTarget?.facingDir || next.dir,
-          christmas: Boolean(pal.christmas),
-          seated: seated && !next.moving,
-          shellElapsedSec,
-        });
-
-        if (agent.state === 'subagents' && agent.subagentDetails?.length) {
-          agent.subagentDetails.slice(0, 2).forEach((sub, sIdx) => {
-            const sx = next.x + (sIdx === 0 ? -32 : 32);
-            const sy = next.y + 8;
-            drawChibiAvatar(
-              ctx,
-              sx,
-              sy,
-              { id: sub.id, personaName: sub.name, source: 'antigravity', state: 'coding' },
-              { tick: tick + sIdx, scale: 0.78, seated: true, christmas: Boolean(pal.christmas) }
-            );
-            drawNamePill(ctx, sx, sy + 13, sub.name, 'S', '#c084fc');
-          });
-        }
-
-        const badgeChar = agent.source === 'gemini-web' ? '✦' : 'A';
-        const badgeColor = agent.source === 'gemini-web' ? '#c084fc' : '#57c1ff';
-        drawNamePill(ctx, next.x, next.y + 15, personality.displayName, badgeChar, badgeColor);
-
-        const socialBubble = this.social?.getAgentBubble(agent.id, now);
-        if (agent.state === 'waiting') {
-          drawSpeechBubble(ctx, next.x, next.y - 24, agent.toolSummary || 'Precisa de você!', 'waiting');
-        } else if (agent.state === 'dreaming') {
-          drawSpeechBubble(ctx, next.x, next.y - 45, 'Consolidando memórias', 'dreaming');
-        } else if (agent.state === 'error') {
-          drawSpeechBubble(ctx, next.x, next.y - 24, 'Erro na execução!', 'error');
-        } else if (socialBubble) {
-          drawSpeechBubble(ctx, next.x, next.y - 24, socialBubble.text, socialBubble.kind);
-        } else if (!next.moving && !['idle', 'done'].includes(agent.state)) {
-          const text = agent.toolSummary
-            ? `${STATE_LABELS_PT[agent.state]} ${agent.toolSummary}`
-            : STATE_LABELS_PT[agent.state] || agent.state;
-          drawSpeechBubble(ctx, next.x, next.y - 24, text, 'work');
-        }
-
-        this.hitboxes.push({
-          type: 'agent',
-          x: next.x - 18,
-          y: next.y - 28,
-          w: 36,
-          h: 56,
+        renderQueue.push({
+          y: next.y,
           agent,
+          next,
+          seated,
+          socialTarget,
         });
+      });
+    }
+
+    renderQueue.sort((a, b) => a.y - b.y);
+
+    for (const item of renderQueue) {
+      const { agent, next, seated, socialTarget } = item;
+      const personality = getAgentPersonality(agent);
+      const shellElapsedSec =
+        agent.toolStartedAt && !['idle', 'done', 'dreaming'].includes(agent.state)
+          ? Math.floor((now - agent.toolStartedAt) / 1000)
+          : 0;
+
+      if (this.selectedAgentId === agent.id) {
+        ctx.save();
+        ctx.strokeStyle = '#5e6ad2';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(Math.round(next.x - 16), Math.round(next.y - 26), 32, 43, 6);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      drawChibiAvatar(ctx, next.x, next.y, agent, {
+        tick,
+        walking: next.moving,
+        dir: socialTarget?.facingDir || next.dir,
+        christmas: Boolean(pal.christmas),
+        seated: seated && !next.moving,
+        shellElapsedSec,
+      });
+
+      if (agent.state === 'subagents' && agent.subagentDetails?.length) {
+        agent.subagentDetails.slice(0, 2).forEach((sub, sIdx) => {
+          const sx = next.x + (sIdx === 0 ? -32 : 32);
+          const sy = next.y + 8;
+          drawChibiAvatar(
+            ctx,
+            sx,
+            sy,
+            { id: sub.id, personaName: sub.name, source: 'antigravity', state: 'coding' },
+            { tick: tick + sIdx, scale: 0.78, seated: true, christmas: Boolean(pal.christmas) }
+          );
+          drawNamePill(ctx, sx, sy + 13, sub.name, 'S', '#c084fc');
+        });
+      }
+
+      const badgeChar = agent.source === 'gemini-web' ? '✦' : 'A';
+      const badgeColor = agent.source === 'gemini-web' ? '#c084fc' : '#57c1ff';
+      drawNamePill(ctx, next.x, next.y + 15, personality.displayName, badgeChar, badgeColor);
+
+      const socialBubble = this.social?.getAgentBubble(agent.id, now);
+      if (agent.state === 'waiting') {
+        drawSpeechBubble(ctx, next.x, next.y - 24, agent.toolSummary || 'Precisa de você!', 'waiting');
+      } else if (agent.state === 'dreaming') {
+        drawSpeechBubble(ctx, next.x, next.y - 45, 'Consolidando memórias', 'dreaming');
+      } else if (agent.state === 'error') {
+        drawSpeechBubble(ctx, next.x, next.y - 24, 'Erro na execução!', 'error');
+      } else if (socialBubble) {
+        drawSpeechBubble(ctx, next.x, next.y - 24, socialBubble.text, socialBubble.kind);
+      } else if (!next.moving && !['idle', 'done'].includes(agent.state)) {
+        const text = agent.toolSummary
+          ? `${STATE_LABELS_PT[agent.state]} ${agent.toolSummary}`
+          : STATE_LABELS_PT[agent.state] || agent.state;
+        drawSpeechBubble(ctx, next.x, next.y - 24, text, 'work');
+      }
+
+      this.hitboxes.push({
+        type: 'agent',
+        x: next.x - 18,
+        y: next.y - 28,
+        w: 36,
+        h: 56,
+        agent,
       });
     }
   }

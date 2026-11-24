@@ -113,6 +113,44 @@ async function pruneClosedTabs() {
   return tracked;
 }
 
+async function refreshOpenGeminiTabs() {
+  const tracked = await pruneClosedTabs();
+  const liveTabs = await chrome.tabs.query({ url: 'https://gemini.google.com/*' });
+  const now = Date.now();
+  let changed = false;
+
+  for (const tab of liveTabs) {
+    if (tab.id == null) continue;
+    const key = String(tab.id);
+    const prev = tracked[key];
+    const title = tab.title || prev?.title || 'Gemini Web';
+    const url = tab.url || prev?.url || 'https://gemini.google.com/app';
+    const entry = {
+      ...(prev || {}),
+      event: 'heartbeat',
+      tabId: tab.id,
+      id: `gemini-tab-${tab.id}`,
+      title,
+      url,
+      model: prev?.model || 'Gemini Web',
+      state: prev?.state || 'idle',
+      promptPreview: prev?.promptPreview || '',
+      responseCount: prev?.responseCount,
+      ts: now,
+    };
+    if (!prev || prev.title !== title || prev.url !== url) {
+      changed = true;
+    }
+    tracked[key] = entry;
+    await postToBridge('/api/gemini-event', entry);
+  }
+
+  if (changed || liveTabs.length > 0) {
+    await setTrackedTabs(tracked);
+  }
+  return tracked;
+}
+
 async function ensureAlarm() {
   const existing = await chrome.alarms.get(ALARM_NAME);
   if (!existing) {
@@ -123,21 +161,21 @@ async function ensureAlarm() {
 chrome.runtime.onInstalled.addListener(async () => {
   await ensureAlarm();
   const ok = await checkBridgeHealth();
-  const tabs = await pruneClosedTabs();
+  const tabs = await refreshOpenGeminiTabs();
   await updateBadge(tabs, ok);
 });
 
 chrome.runtime.onStartup.addListener(async () => {
   await ensureAlarm();
   const ok = await checkBridgeHealth();
-  const tabs = await pruneClosedTabs();
+  const tabs = await refreshOpenGeminiTabs();
   await updateBadge(tabs, ok);
 });
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== ALARM_NAME) return;
   const ok = await checkBridgeHealth();
-  const tabs = await pruneClosedTabs();
+  const tabs = await refreshOpenGeminiTabs();
   await updateBadge(tabs, ok);
 });
 
@@ -212,13 +250,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message?.type === 'RECONNECT_SYNC') {
       const ok = await checkBridgeHealth();
-      const tracked = await pruneClosedTabs();
-      for (const tabPayload of Object.values(tracked)) {
-        await postToBridge('/api/gemini-event', {
-          ...tabPayload,
-          ts: Date.now(),
-        });
-      }
+      const tracked = await refreshOpenGeminiTabs();
       await updateBadge(tracked, ok);
       const bridgeUrl = await getBridgeUrl();
       sendResponse({

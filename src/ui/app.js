@@ -656,7 +656,7 @@ function renderTopHud(snap) {
   const waitingCount = agents.filter((a) => a.state === 'waiting' || a.state === 'error').length;
   const projectRoomsCount = (snap.rooms || []).filter((r) => r.kind !== 'github-hub').length;
 
-  els.statRooms.textContent = String(4 + projectRoomsCount);
+  els.statRooms.textContent = String(5 + projectRoomsCount);
   els.statAgents.textContent = String(agents.length);
   els.statActive.textContent = String(activeAgents.length);
   els.statSubagents.textContent = String(subCount);
